@@ -34,12 +34,12 @@ var LedgerTon = function () {
 
     _createClass(LedgerTon, [{
         key: "getConfiguration",
-        value: function getConfiguration(transport) {
+        value: function getConfiguration() {
             var data = Buffer.alloc(0x00, 0x04);
-            return transport.send(CLA, INS_GET_CONF, 0x00, 0x00, data[SW_OK]).then(function (response) {
+            return this.transport.send(CLA, INS_GET_CONF, 0x00, 0x00, data[SW_OK]).then(function (response) {
                 var status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0);
-                if (status === SW_OK && response.length === 5) {
-                    var configuration = response.slice(0, 3);
+                if (status === SW_OK) {
+                    var configuration = response.slice();
                     return {
                         configuration: configuration
                     };
@@ -76,7 +76,7 @@ var LedgerTon = function () {
             return this.transport.send(CLA, INS_SIGN, 0x00, 0x00, apdus, [SW_OK, SW_CANCEL, SW_NOT_ALLOWED, SW_UNSUPPORTED]).then(function (response) {
                 var status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0);
                 if (status === SW_OK) {
-                    var signature = Buffer.from(response.slice(1, response.length - 2));
+                    var signature = response.slice(1, response.length - 2);
                     return { signature: signature };
                 } else if (status === SW_CANCEL) {
                     throw new Error('Transaction approval request was rejected');
@@ -238,15 +238,13 @@ var LedgerBridge = function () {
                 this.sendMessageToExtension({
                     action: replyAction,
                     success: true,
-                    payload: res,
-                    error: undefined
+                    payload: res
                 });
             } catch (err) {
                 var e = this.ledgerErrToMessage(err);
                 this.sendMessageToExtension({
                     action: replyAction,
                     success: false,
-                    payload: undefined,
                     error: new Error(e.toString())
                 });
             } finally {

@@ -4,6 +4,7 @@ require('buffer')
 import TransportWebHID from '@ledgerhq/hw-transport-webhid'
 import LedgerTon from "./hw-app-ton";
 
+
 export default class LedgerBridge {
     constructor () {
         this.addEventListeners()
@@ -110,14 +111,12 @@ export default class LedgerBridge {
                 action: replyAction,
                 success: true,
                 payload: res,
-                error: undefined,
             })
         } catch (err) {
             const e = this.ledgerErrToMessage(err)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                payload: undefined,
                 error: new Error(e.toString())
             })
         } finally {

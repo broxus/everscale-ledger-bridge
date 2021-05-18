@@ -1,7 +1,7 @@
 require('buffer')
 
 const CLA = 0xe0
-const INS_GET_CONF = 0x01;
+const INS_GET_CONF = 0x01
 const INS_GET_PK = 0x02
 const INS_SIGN = 0x03
 const SW_OK = 0x9000
@@ -11,24 +11,24 @@ const SW_UNSUPPORTED = 0x6d00
 
 export default class LedgerTon {
     constructor(transport, scrambleKey = "l0v") {
-        this.transport = void 0;
-        this.transport = transport;
-        transport.decorateAppAPIMethods(this, ["getPublicKey", "signHash"], scrambleKey);
+        this.transport = void 0
+        this.transport = transport
+        transport.decorateAppAPIMethods(this, ["getPublicKey", "signHash"], scrambleKey)
     }
 
-    getConfiguration(transport) {
-        let data = Buffer.alloc(0x00, 0x04);
-        return transport.send(CLA, INS_GET_CONF, 0x00, 0x00, data [SW_OK]).then(response => {
-            let status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0);
-            if (status === SW_OK && response.length === 5) {
-                let configuration = response.slice(0, 3);
+    getConfiguration() {
+        let data = Buffer.alloc(0x00, 0x04)
+        return this.transport.send(CLA, INS_GET_CONF, 0x00, 0x00, data [SW_OK]).then(response => {
+            let status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0)
+            if (status === SW_OK) {
+                let configuration = response.slice()
                 return {
                     configuration
-                };
+                }
             } else {
                 throw new Error('Failed to get configuration')
             }
-        });
+        })
     }
 
     getPublicKey(account, boolValidate = false) {
@@ -63,7 +63,7 @@ export default class LedgerTon {
             .then((response) => {
                 let status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0)
                 if (status === SW_OK) {
-                    let signature = Buffer.from(response.slice(1, response.length - 2))
+                    let signature = response.slice(1, response.length - 2)
                     return { signature }
                 } else if (status === SW_CANCEL) {
                     throw new Error('Transaction approval request was rejected')
