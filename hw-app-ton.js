@@ -9,7 +9,7 @@ const SW_CANCEL = 0x6985
 const SW_NOT_ALLOWED = 0x6c66
 const SW_UNSUPPORTED = 0x6d00
 
-export default class LedgerApp {
+export default class LedgerTon {
     constructor(transport, scrambleKey = "l0v") {
         this.transport = void 0;
         this.transport = transport;

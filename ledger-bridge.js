@@ -2,7 +2,7 @@
 require('buffer')
 
 import TransportWebHID from '@ledgerhq/hw-transport-webhid'
-import LedgerApp from "./ledger-app";
+import LedgerTon from "./hw-app-ton";
 
 export default class LedgerBridge {
     constructor () {
@@ -12,7 +12,7 @@ export default class LedgerBridge {
     addEventListeners () {
         window.addEventListener('message', async e => {
             if (e && e.data && e.data.target === 'LEDGER-IFRAME') {
-                const { action, params } = this.data
+                const { action, params } = e.data
                 const replyAction = `${action}-reply`
 
                 switch (action) {
@@ -40,7 +40,7 @@ export default class LedgerBridge {
     async makeApp () {
         try {
             this.transport = await TransportWebHID.create()
-            this.app = new LedgerApp(this.transport)
+            this.app = new LedgerTon(this.transport)
         } catch (e) {
             throw e
         }

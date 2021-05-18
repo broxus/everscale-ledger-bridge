@@ -21,18 +21,18 @@ var SW_CANCEL = 0x6985;
 var SW_NOT_ALLOWED = 0x6c66;
 var SW_UNSUPPORTED = 0x6d00;
 
-var LedgerApp = function () {
-    function LedgerApp(transport) {
+var LedgerTon = function () {
+    function LedgerTon(transport) {
         var scrambleKey = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : "l0v";
 
-        _classCallCheck(this, LedgerApp);
+        _classCallCheck(this, LedgerTon);
 
         this.transport = void 0;
         this.transport = transport;
         transport.decorateAppAPIMethods(this, ["getPublicKey", "signHash"], scrambleKey);
     }
 
-    _createClass(LedgerApp, [{
+    _createClass(LedgerTon, [{
         key: "getConfiguration",
         value: function getConfiguration(transport) {
             var data = Buffer.alloc(0x00, 0x04);
@@ -89,10 +89,10 @@ var LedgerApp = function () {
         }
     }]);
 
-    return LedgerApp;
+    return LedgerTon;
 }();
 
-exports.default = LedgerApp;
+exports.default = LedgerTon;
 
 }).call(this,require("buffer").Buffer)
 },{"buffer":55}],2:[function(require,module,exports){
@@ -108,9 +108,9 @@ var _hwTransportWebhid = require('@ledgerhq/hw-transport-webhid');
 
 var _hwTransportWebhid2 = _interopRequireDefault(_hwTransportWebhid);
 
-var _ledgerApp = require('./ledger-app');
+var _hwAppTon = require('./hw-app-ton');
 
-var _ledgerApp2 = _interopRequireDefault(_ledgerApp);
+var _hwAppTon2 = _interopRequireDefault(_hwAppTon);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -132,9 +132,9 @@ var LedgerBridge = function () {
 
             window.addEventListener('message', async function (e) {
                 if (e && e.data && e.data.target === 'LEDGER-IFRAME') {
-                    var _data = _this.data,
-                        action = _data.action,
-                        params = _data.params;
+                    var _e$data = e.data,
+                        action = _e$data.action,
+                        params = _e$data.params;
 
                     var replyAction = action + '-reply';
 
@@ -165,7 +165,7 @@ var LedgerBridge = function () {
         value: async function makeApp() {
             try {
                 this.transport = await _hwTransportWebhid2.default.create();
-                this.app = new _ledgerApp2.default(this.transport);
+                this.app = new _hwAppTon2.default(this.transport);
             } catch (e) {
                 throw e;
             }
@@ -306,7 +306,7 @@ var LedgerBridge = function () {
 
 exports.default = LedgerBridge;
 
-},{"./ledger-app":1,"@ledgerhq/hw-transport-webhid":51,"buffer":55}],3:[function(require,module,exports){
+},{"./hw-app-ton":1,"@ledgerhq/hw-transport-webhid":51,"buffer":55}],3:[function(require,module,exports){
 'use strict';
 
 var _ledgerBridge = require('./ledger-bridge');
