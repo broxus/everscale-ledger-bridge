@@ -1,3 +1,16 @@
+@font-face {
+    font-family: 'PT Root UI';
+    font-weight: normal;
+    src: url('./fonts/PT-Root-UI-Regular.ttf');
+}
+
+
+@font-face {
+    font-family: 'PT Root UI';
+    font-weight: bold;
+    src: url('./fonts/PT-Root-UI-Bold.ttf');
+}
+
 .connect-ledger__icon {
      display: flex;
      justify-content: center;
@@ -39,7 +52,6 @@
     overflow: hidden;
 
     padding: 0.8em 1em;
-    width: 100%;
 
     font-style: normal;
     font-family: 'PT Root UI', serif;
