@@ -1,0 +1,72 @@
+.connect-ledger__icon {
+     display: flex;
+     justify-content: center;
+     margin-bottom: 40px;
+     width: 100%;
+ }
+
+.connect-ledger__title {
+     margin-bottom: 16px;
+ }
+
+.connect-ledger__comment {
+     font-size: 16px;
+     line-height: 20px;
+     letter-spacing: 0.25px;
+     margin-bottom: 40px;
+ }
+
+.connect-ledger__buttons {
+    display: flex;
+}
+.connect-ledger__buttons-next {
+     width: 66%;
+ }
+
+.connect-ledger__buttons-back {
+     width: 33%;
+     margin-right: 12px;
+ }
+
+
+.button {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-content: center;
+
+    position: relative;
+    overflow: hidden;
+
+    padding: 0.8em 1em;
+    width: 100%;
+
+    font-style: normal;
+    font-family: 'PT Root UI', serif;
+    font-weight: bold;
+    z-index: 2;
+}
+
+.blue {
+    background-color: #0088cc;
+    border: 1px solid #0088cc;
+    color: #ffffff;
+}
+
+.blue:hover {
+     color: #ffffff;
+     background-color: #027bb8;
+ }
+
+.white {
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 136, 204, 0.2);
+    color: #0088cc;
+}
+
+.white:hover {
+     color: #027bb8;
+     background-color: #ffffff;
+ }
+
+
