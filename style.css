@@ -19,21 +19,23 @@
  }
 
 .connect-ledger__title {
-     margin-bottom: 16px;
- }
+    margin-bottom: 16px;
+    font-family: 'PT Root UI', serif;
+}
 
 .connect-ledger__comment {
-     font-size: 16px;
-     line-height: 20px;
-     letter-spacing: 0.25px;
-     margin-bottom: 40px;
+    font-family: 'PT Root UI', serif;
+    font-size: 16px;
+    line-height: 20px;
+    letter-spacing: 0.25px;
+    margin-bottom: 40px;
  }
 
 .connect-ledger__buttons {
     display: flex;
 }
 .connect-ledger__buttons-next {
-     width: 66%;
+    width: 66%;
  }
 
 .connect-ledger__buttons-back {
@@ -47,6 +49,8 @@
     flex-direction: row;
     justify-content: center;
     align-content: center;
+
+    cursor: pointer;
 
     position: relative;
     overflow: hidden;
