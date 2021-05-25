@@ -35,7 +35,7 @@ var LedgerTon = function () {
     _createClass(LedgerTon, [{
         key: "getConfiguration",
         value: function getConfiguration() {
-            var data = Buffer.alloc(0x00, 0x04);
+            var data = Buffer.alloc(0);
             return this.transport.send(CLA, INS_GET_CONF, 0x00, 0x00, data[SW_OK]).then(function (response) {
                 var status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0);
                 if (status === SW_OK) {
@@ -188,7 +188,9 @@ var LedgerBridge = function () {
         key: 'getConfiguration',
         value: async function getConfiguration(replyAction) {
             try {
+                console.log("Make Ledger Bridge app");
                 await this.makeApp();
+                console.log("Get Ledger Bridge conf");
                 var res = await this.app.getConfiguration();
                 this.sendMessageToExtension({
                     action: replyAction,
@@ -196,6 +198,7 @@ var LedgerBridge = function () {
                     payload: res
                 });
             } catch (err) {
+                console.log("Error Ledger Bridge: ", err);
                 var e = this.ledgerErrToMessage(err);
                 this.sendMessageToExtension({
                     action: replyAction,
