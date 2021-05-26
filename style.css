@@ -11,6 +11,13 @@
     src: url('./fonts/PT-Root-UI-Bold.ttf');
 }
 
+.connect-ledger {
+    height: 100%;
+    display: flex;
+    justify-content: space-between;
+    flex-direction: column;
+}
+
 .connect-ledger__icon {
      display: flex;
      justify-content: center;
@@ -31,18 +38,9 @@
     margin-bottom: 40px;
  }
 
-.connect-ledger__buttons {
-    display: flex;
-}
 .connect-ledger__buttons-next {
-    width: 66%;
+    width: 100%;
  }
-
-.connect-ledger__buttons-back {
-     width: 33%;
-     margin-right: 12px;
- }
-
 
 .button {
     display: flex;
