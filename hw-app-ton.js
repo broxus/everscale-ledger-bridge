@@ -17,8 +17,7 @@ export default class LedgerTon {
     }
 
     getConfiguration() {
-        let data = Buffer.alloc(0x00, 0x04)
-        return this.transport.send(CLA, INS_GET_CONF, 0x00, 0x00, data [SW_OK]).then(response => {
+        return this.transport.send(CLA, INS_GET_CONF, 0x00, 0x00).then(response => {
             let status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0)
             if (status === SW_OK) {
                 let configuration = response.slice()

@@ -35,8 +35,7 @@ var LedgerTon = function () {
     _createClass(LedgerTon, [{
         key: "getConfiguration",
         value: function getConfiguration() {
-            var data = Buffer.alloc(0x00, 0x04);
-            return this.transport.send(CLA, INS_GET_CONF, 0x00, 0x00, data[SW_OK]).then(function (response) {
+            return this.transport.send(CLA, INS_GET_CONF, 0x00, 0x00).then(function (response) {
                 var status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0);
                 if (status === SW_OK) {
                     var configuration = response.slice();
