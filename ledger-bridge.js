@@ -62,9 +62,7 @@ export default class LedgerBridge {
 
     async getConfiguration (replyAction) {
         try {
-            console.log("Make Ledger Bridge app")
             await this.makeApp()
-            console.log("Get Ledger Bridge conf")
             const res = await this.app.getConfiguration()
             this.sendMessageToExtension({
                 action: replyAction,
@@ -72,7 +70,6 @@ export default class LedgerBridge {
                 payload: res,
             })
         } catch (err) {
-            console.log("Error Ledger Bridge: ", err)
             const e = this.ledgerErrToMessage(err)
             this.sendMessageToExtension({
                 action: replyAction,
