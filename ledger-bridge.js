@@ -3,11 +3,19 @@ require('buffer')
 
 import TransportWebHID from '@ledgerhq/hw-transport-webhid'
 import LedgerTon from "./hw-app-ton";
+import WebSocketTransport from '@ledgerhq/hw-transport-http/lib/WebSocketTransport'
 
+// URL which triggers Ledger Live app to open and handle communication
+const BRIDGE_URL = 'ws://localhost:8435'
+
+// Number of seconds to poll for Ledger Live and Ethereum app opening
+const TRANSPORT_CHECK_DELAY = 1000
+const TRANSPORT_CHECK_LIMIT = 120
 
 export default class LedgerBridge {
     constructor () {
         this.addEventListeners()
+        this.useLedgerLive = false
     }
 
     addEventListeners () {
@@ -23,11 +31,17 @@ export default class LedgerBridge {
                     case 'ledger-get-public-key':
                         this.getPublicKey(replyAction, params.account)
                         break
-                    case 'ledger-sign-hash':
-                        this.signHash(replyAction, params.account, params.message)
+                    case 'ledger-get-address':
+                        this.getAddress(replyAction, params.account, params.contract)
+                        break
+                    case 'ledger-sign-message':
+                        this.signMessage(replyAction, params.account, params.message)
                         break
                     case 'ledger-close-bridge':
                         this.cleanUp(replyAction)
+                        break
+                    case 'ledger-update-transport':
+                        this.updateLedgerLivePreference(replyAction, params.useLedgerLive)
                         break
                 }
             }
@@ -38,13 +52,55 @@ export default class LedgerBridge {
         window.parent.postMessage(msg, '*')
     }
 
+    delay (ms) {
+        return new Promise((success) => setTimeout(success, ms))
+    }
+
+    checkTransportLoop (i) {
+        const iterator = i || 0
+        return WebSocketTransport.check(BRIDGE_URL).catch(async () => {
+            await this.delay(TRANSPORT_CHECK_DELAY)
+            if (iterator < TRANSPORT_CHECK_LIMIT) {
+                return this.checkTransportLoop(iterator + 1)
+            } else {
+                throw new Error('Ledger transport check timeout')
+            }
+        })
+    }
+
     async makeApp () {
         try {
-            this.transport = await TransportWebHID.create()
-            this.app = new LedgerTon(this.transport)
+            if (this.useLedgerLive) {
+                let reestablish = false;
+                try {
+                    await WebSocketTransport.check(BRIDGE_URL)
+                } catch (_err) {
+                    window.open('ledgerlive://bridge?appName=FreeTON')
+                    await this.checkTransportLoop()
+                    reestablish = true;
+                }
+                if (!this.app || reestablish) {
+                    this.transport = await WebSocketTransport.open(BRIDGE_URL)
+                    this.app = new LedgerTon(this.transport)
+                }
+            }
+            else {
+                this.transport = await TransportWebHID.create()
+                this.app = new LedgerTon(this.transport)
+            }
         } catch (e) {
+            console.log('LEDGER:::CREATE APP ERROR', e)
             throw e
         }
+    }
+
+    updateLedgerLivePreference (replyAction, useLedgerLive) {
+        this.useLedgerLive = useLedgerLive
+        this.cleanUp()
+        this.sendMessageToExtension({
+            action: replyAction,
+            success: true,
+        })
     }
 
     cleanUp (replyAction) {
@@ -77,7 +133,9 @@ export default class LedgerBridge {
                 error: new Error(e.toString())
             })
         } finally {
-            this.cleanUp()
+            if (!this.useLedgerLive) {
+                this.cleanUp()
+            }
         }
     }
 
@@ -98,15 +156,16 @@ export default class LedgerBridge {
                 error: new Error(e.toString())
             })
         } finally {
-            this.cleanUp()
+            if (!this.useLedgerLive) {
+                this.cleanUp()
+            }
         }
     }
 
-    async signHash (replyAction, account, message) {
+    async getAddress (replyAction, account, contract) {
         try {
             await this.makeApp()
-
-            const res = await this.app.signHash(account, message)
+            const res = await this.app.getAddress(account, contract)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: true,
@@ -120,7 +179,33 @@ export default class LedgerBridge {
                 error: new Error(e.toString())
             })
         } finally {
-            this.cleanUp()
+            if (!this.useLedgerLive) {
+                this.cleanUp()
+            }
+        }
+    }
+
+    async signMessage (replyAction, account, message) {
+        try {
+            await this.makeApp()
+
+            const res = await this.app.signMessage(account, message)
+            this.sendMessageToExtension({
+                action: replyAction,
+                success: true,
+                payload: res,
+            })
+        } catch (err) {
+            const e = this.ledgerErrToMessage(err)
+            this.sendMessageToExtension({
+                action: replyAction,
+                success: false,
+                error: new Error(e.toString())
+            })
+        } finally {
+            if (!this.useLedgerLive) {
+                this.cleanUp()
+            }
         }
     }
 
@@ -128,7 +213,7 @@ export default class LedgerBridge {
         const isWrongAppError = (err) => String(err.message || err).includes('0x6700')
         const isLedgerLockedError = (err) => String(err.message || err).includes('0x6804')
         const isUserCanceledError = (err) => err.name && err.name.includes('TransportOpenUserCancelled')
-        const isSignNotSupported = (err) => err.message && err.message.includes('Hash signing is not supported')
+        const isSignNotSupported = (err) => err.message && err.message.includes('Message signing is not supported')
         const isTransactionRejected = (err) => err.message && err.message.includes('Transaction approval request was rejected')
 
         if (isWrongAppError(err)) {
