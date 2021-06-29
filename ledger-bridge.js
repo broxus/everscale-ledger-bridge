@@ -75,7 +75,7 @@ export default class LedgerBridge {
                 try {
                     await WebSocketTransport.check(BRIDGE_URL)
                 } catch (_err) {
-                    window.open('ledgerlive://bridge?appName=FreeTON')
+                    window.open('ledgerlive://bridge?appName=Ethereum')
                     await this.checkTransportLoop()
                     reestablish = true;
                 }
