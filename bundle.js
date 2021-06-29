@@ -16,6 +16,7 @@ var CLA = 0xe0;
 var INS_GET_CONF = 0x01;
 var INS_GET_PK = 0x02;
 var INS_SIGN = 0x03;
+var INS_GET_ADDR = 0x04;
 var SW_OK = 0x9000;
 var SW_CANCEL = 0x6985;
 var SW_NOT_ALLOWED = 0x6c66;
@@ -29,7 +30,7 @@ var LedgerTon = function () {
 
         this.transport = void 0;
         this.transport = transport;
-        transport.decorateAppAPIMethods(this, ["getPublicKey", "signHash"], scrambleKey);
+        transport.decorateAppAPIMethods(this, ["getConfiguration", "getPublicKey", "getAddress", "signMessage"], scrambleKey);
     }
 
     _createClass(LedgerTon, [{
@@ -66,11 +67,30 @@ var LedgerTon = function () {
             });
         }
     }, {
-        key: "signHash",
-        value: function signHash(account, hash) {
+        key: "getAddress",
+        value: function getAddress(account, contract) {
+            var boolValidate = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+
+            var data = Buffer.alloc(8);
+            data.writeUInt32BE(account, 0);
+            data.writeUInt32BE(contract, 4);
+            return this.transport.send(CLA, INS_GET_ADDR, boolValidate ? 0x01 : 0x00, 0x00, data, [SW_OK]).then(function (response) {
+                var status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0);
+                if (status === SW_OK) {
+                    var offset = 1;
+                    var address = response.slice(offset, offset + 32);
+                    return { address: address };
+                } else {
+                    throw new Error('Failed to get address');
+                }
+            });
+        }
+    }, {
+        key: "signMessage",
+        value: function signMessage(account, message) {
             var data = Buffer.alloc(4);
-            data.writeUInt32BE(account);
-            var buffer = [data, hash];
+            data.writeUInt32BE(account, 0);
+            var buffer = [data, message];
             var apdus = Buffer.concat(buffer);
             return this.transport.send(CLA, INS_SIGN, 0x00, 0x00, apdus, [SW_OK, SW_CANCEL, SW_NOT_ALLOWED, SW_UNSUPPORTED]).then(function (response) {
                 var status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0);
@@ -80,9 +100,9 @@ var LedgerTon = function () {
                 } else if (status === SW_CANCEL) {
                     throw new Error('Transaction approval request was rejected');
                 } else if (status === SW_UNSUPPORTED) {
-                    throw new Error('Hash signing is not supported');
+                    throw new Error('Message signing is not supported');
                 } else {
-                    throw new Error('Hash signing not allowed. Have you enabled it in the app settings?');
+                    throw new Error('Message signing not allowed. Have you enabled it in the app settings?');
                 }
             });
         }
@@ -94,7 +114,7 @@ var LedgerTon = function () {
 exports.default = LedgerTon;
 
 }).call(this,require("buffer").Buffer)
-},{"buffer":55}],2:[function(require,module,exports){
+},{"buffer":61}],2:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
@@ -111,17 +131,29 @@ var _hwAppTon = require('./hw-app-ton');
 
 var _hwAppTon2 = _interopRequireDefault(_hwAppTon);
 
+var _WebSocketTransport = require('@ledgerhq/hw-transport-http/lib/WebSocketTransport');
+
+var _WebSocketTransport2 = _interopRequireDefault(_WebSocketTransport);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 require('buffer');
 
+// URL which triggers Ledger Live app to open and handle communication
+var BRIDGE_URL = 'ws://localhost:8435';
+
+// Number of seconds to poll for Ledger Live and Ethereum app opening
+var TRANSPORT_CHECK_DELAY = 1000;
+var TRANSPORT_CHECK_LIMIT = 120;
+
 var LedgerBridge = function () {
     function LedgerBridge() {
         _classCallCheck(this, LedgerBridge);
 
         this.addEventListeners();
+        this.useLedgerLive = false;
     }
 
     _createClass(LedgerBridge, [{
@@ -144,11 +176,17 @@ var LedgerBridge = function () {
                         case 'ledger-get-public-key':
                             _this.getPublicKey(replyAction, params.account);
                             break;
-                        case 'ledger-sign-hash':
-                            _this.signHash(replyAction, params.account, params.message);
+                        case 'ledger-get-address':
+                            _this.getAddress(replyAction, params.account, params.contract);
+                            break;
+                        case 'ledger-sign-message':
+                            _this.signMessage(replyAction, params.account, params.message);
                             break;
                         case 'ledger-close-bridge':
                             _this.cleanUp(replyAction);
+                            break;
+                        case 'ledger-update-transport':
+                            _this.updateLedgerLivePreference(replyAction, params.useLedgerLive);
                             break;
                     }
                 }
@@ -160,14 +198,62 @@ var LedgerBridge = function () {
             window.parent.postMessage(msg, '*');
         }
     }, {
+        key: 'delay',
+        value: function delay(ms) {
+            return new Promise(function (success) {
+                return setTimeout(success, ms);
+            });
+        }
+    }, {
+        key: 'checkTransportLoop',
+        value: function checkTransportLoop(i) {
+            var _this2 = this;
+
+            var iterator = i || 0;
+            return _WebSocketTransport2.default.check(BRIDGE_URL).catch(async function () {
+                await _this2.delay(TRANSPORT_CHECK_DELAY);
+                if (iterator < TRANSPORT_CHECK_LIMIT) {
+                    return _this2.checkTransportLoop(iterator + 1);
+                } else {
+                    throw new Error('Ledger transport check timeout');
+                }
+            });
+        }
+    }, {
         key: 'makeApp',
         value: async function makeApp() {
             try {
-                this.transport = await _hwTransportWebhid2.default.create();
-                this.app = new _hwAppTon2.default(this.transport);
+                if (this.useLedgerLive) {
+                    var reestablish = false;
+                    try {
+                        await _WebSocketTransport2.default.check(BRIDGE_URL);
+                    } catch (_err) {
+                        window.open('ledgerlive://bridge?appName=Ethereum');
+                        await this.checkTransportLoop();
+                        reestablish = true;
+                    }
+                    if (!this.app || reestablish) {
+                        this.transport = await _WebSocketTransport2.default.open(BRIDGE_URL);
+                        this.app = new _hwAppTon2.default(this.transport);
+                    }
+                } else {
+                    this.transport = await _hwTransportWebhid2.default.create();
+                    this.app = new _hwAppTon2.default(this.transport);
+                }
             } catch (e) {
+                console.log('LEDGER:::CREATE APP ERROR', e);
                 throw e;
             }
+        }
+    }, {
+        key: 'updateLedgerLivePreference',
+        value: function updateLedgerLivePreference(replyAction, useLedgerLive) {
+            this.useLedgerLive = useLedgerLive;
+            this.cleanUp();
+            this.sendMessageToExtension({
+                action: replyAction,
+                success: true
+            });
         }
     }, {
         key: 'cleanUp',
@@ -202,7 +288,9 @@ var LedgerBridge = function () {
                     error: new Error(e.toString())
                 });
             } finally {
-                this.cleanUp();
+                if (!this.useLedgerLive) {
+                    this.cleanUp();
+                }
             }
         }
     }, {
@@ -224,16 +312,17 @@ var LedgerBridge = function () {
                     error: new Error(e.toString())
                 });
             } finally {
-                this.cleanUp();
+                if (!this.useLedgerLive) {
+                    this.cleanUp();
+                }
             }
         }
     }, {
-        key: 'signHash',
-        value: async function signHash(replyAction, account, message) {
+        key: 'getAddress',
+        value: async function getAddress(replyAction, account, contract) {
             try {
                 await this.makeApp();
-
-                var res = await this.app.signHash(account, message);
+                var res = await this.app.getAddress(account, contract);
                 this.sendMessageToExtension({
                     action: replyAction,
                     success: true,
@@ -247,7 +336,34 @@ var LedgerBridge = function () {
                     error: new Error(e.toString())
                 });
             } finally {
-                this.cleanUp();
+                if (!this.useLedgerLive) {
+                    this.cleanUp();
+                }
+            }
+        }
+    }, {
+        key: 'signMessage',
+        value: async function signMessage(replyAction, account, message) {
+            try {
+                await this.makeApp();
+
+                var res = await this.app.signMessage(account, message);
+                this.sendMessageToExtension({
+                    action: replyAction,
+                    success: true,
+                    payload: res
+                });
+            } catch (err) {
+                var e = this.ledgerErrToMessage(err);
+                this.sendMessageToExtension({
+                    action: replyAction,
+                    success: false,
+                    error: new Error(e.toString())
+                });
+            } finally {
+                if (!this.useLedgerLive) {
+                    this.cleanUp();
+                }
             }
         }
     }, {
@@ -263,7 +379,7 @@ var LedgerBridge = function () {
                 return err.name && err.name.includes('TransportOpenUserCancelled');
             };
             var isSignNotSupported = function isSignNotSupported(err) {
-                return err.message && err.message.includes('Hash signing is not supported');
+                return err.message && err.message.includes('Message signing is not supported');
             };
             var isTransactionRejected = function isTransactionRejected(err) {
                 return err.message && err.message.includes('Transaction approval request was rejected');
@@ -303,7 +419,7 @@ var LedgerBridge = function () {
 
 exports.default = LedgerBridge;
 
-},{"./hw-app-ton":1,"@ledgerhq/hw-transport-webhid":51,"buffer":55}],3:[function(require,module,exports){
+},{"./hw-app-ton":1,"@ledgerhq/hw-transport-http/lib/WebSocketTransport":51,"@ledgerhq/hw-transport-webhid":57,"buffer":61}],3:[function(require,module,exports){
 'use strict';
 
 var _ledgerBridge = require('./ledger-bridge');
@@ -427,7 +543,7 @@ var _default = createHIDframing;
 exports.default = _default;
 
 }).call(this,require("buffer").Buffer)
-},{"@ledgerhq/errors":50,"buffer":55}],5:[function(require,module,exports){
+},{"@ledgerhq/errors":50,"buffer":61}],5:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -1248,7 +1364,7 @@ const testSet = (set, version, options) => {
   return true
 }
 
-},{"../internal/debug":35,"../internal/parse-options":37,"../internal/re":38,"./comparator":6,"./semver":8,"lru-cache":58}],8:[function(require,module,exports){
+},{"../internal/debug":35,"../internal/parse-options":37,"../internal/re":38,"./comparator":6,"./semver":8,"lru-cache":64}],8:[function(require,module,exports){
 const debug = require('../internal/debug')
 const { MAX_LENGTH, MAX_SAFE_INTEGER } = require('../internal/constants')
 const { re, t } = require('../internal/re')
@@ -1916,7 +2032,7 @@ const debug = (
 module.exports = debug
 
 }).call(this,require('_process'))
-},{"_process":59}],36:[function(require,module,exports){
+},{"_process":65}],36:[function(require,module,exports){
 const numeric = /^[0-9]+$/
 const compareIdentifiers = (a, b) => {
   const anum = numeric.test(a)
@@ -3051,6 +3167,940 @@ exports.serializeError = serializeError;
 },{}],51:[function(require,module,exports){
 (function (global,Buffer){
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+exports.__esModule = true;
+var hw_transport_1 = __importDefault(require("@ledgerhq/hw-transport"));
+var errors_1 = require("@ledgerhq/errors");
+var logs_1 = require("@ledgerhq/logs");
+var WebSocket = global.WebSocket || require("ws");
+/**
+ * WebSocket transport implementation
+ */
+var WebSocketTransport = /** @class */ (function (_super) {
+    __extends(WebSocketTransport, _super);
+    function WebSocketTransport(hook) {
+        var _this = _super.call(this) || this;
+        _this.hook = hook;
+        hook.onDisconnect = function () {
+            _this.emit("disconnect");
+            _this.hook.rejectExchange(new errors_1.TransportError("WebSocket disconnected", "WSDisconnect"));
+        };
+        return _this;
+    }
+    WebSocketTransport.open = function (url) {
+        return __awaiter(this, void 0, void 0, function () {
+            var exchangeMethods;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, new Promise(function (resolve, reject) {
+                            try {
+                                var socket_1 = new WebSocket(url);
+                                var exchangeMethods_1 = {
+                                    resolveExchange: function (_b) { },
+                                    rejectExchange: function (_e) { },
+                                    onDisconnect: function () { },
+                                    close: function () { return socket_1.close(); },
+                                    send: function (msg) { return socket_1.send(msg); }
+                                };
+                                socket_1.onopen = function () {
+                                    socket_1.send("open");
+                                };
+                                socket_1.onerror = function (e) {
+                                    exchangeMethods_1.onDisconnect();
+                                    reject(e);
+                                };
+                                socket_1.onclose = function () {
+                                    exchangeMethods_1.onDisconnect();
+                                    reject(new errors_1.TransportError("OpenFailed", "OpenFailed"));
+                                };
+                                socket_1.onmessage = function (e) {
+                                    if (typeof e.data !== "string")
+                                        return;
+                                    var data = JSON.parse(e.data);
+                                    switch (data.type) {
+                                        case "opened":
+                                            return resolve(exchangeMethods_1);
+                                        case "error":
+                                            reject(new Error(data.error));
+                                            return exchangeMethods_1.rejectExchange(new errors_1.TransportError(data.error, "WSError"));
+                                        case "response":
+                                            return exchangeMethods_1.resolveExchange(Buffer.from(data.data, "hex"));
+                                    }
+                                };
+                            }
+                            catch (e) {
+                                reject(e);
+                            }
+                        })];
+                    case 1:
+                        exchangeMethods = _a.sent();
+                        return [2 /*return*/, new WebSocketTransport(exchangeMethods)];
+                }
+            });
+        });
+    };
+    WebSocketTransport.prototype.exchange = function (apdu) {
+        return __awaiter(this, void 0, void 0, function () {
+            var hex, res;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        hex = apdu.toString("hex");
+                        logs_1.log("apdu", "=> " + hex);
+                        return [4 /*yield*/, new Promise(function (resolve, reject) {
+                                _this.hook.rejectExchange = function (e) { return reject(e); };
+                                _this.hook.resolveExchange = function (b) { return resolve(b); };
+                                _this.hook.send(hex);
+                            })];
+                    case 1:
+                        res = _a.sent();
+                        logs_1.log("apdu", "<= " + res.toString("hex"));
+                        return [2 /*return*/, res];
+                }
+            });
+        });
+    };
+    WebSocketTransport.prototype.setScrambleKey = function () { };
+    WebSocketTransport.prototype.close = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                this.hook.close();
+                return [2 /*return*/, new Promise(function (success) {
+                        setTimeout(function () {
+                            success(undefined);
+                        }, 200);
+                    })];
+            });
+        });
+    };
+    WebSocketTransport.isSupported = function () {
+        return Promise.resolve(typeof WebSocket === "function");
+    };
+    // this transport is not discoverable
+    WebSocketTransport.list = function () { return Promise.resolve([]); };
+    WebSocketTransport.listen = function (_observer) { return ({
+        unsubscribe: function () { }
+    }); };
+    WebSocketTransport.check = function (url, timeout) {
+        if (timeout === void 0) { timeout = 5000; }
+        return __awaiter(void 0, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2 /*return*/, new Promise(function (resolve, reject) {
+                        var socket = new WebSocket(url);
+                        var success = false;
+                        setTimeout(function () {
+                            socket.close();
+                        }, timeout);
+                        socket.onopen = function () {
+                            success = true;
+                            socket.close();
+                        };
+                        socket.onclose = function () {
+                            if (success)
+                                resolve(undefined);
+                            else {
+                                reject(new errors_1.TransportError("failed to access WebSocketTransport(" + url + ")", "WebSocketTransportNotAccessible"));
+                            }
+                        };
+                        socket.onerror = function () {
+                            reject(new errors_1.TransportError("failed to access WebSocketTransport(" + url + "): error", "WebSocketTransportNotAccessible"));
+                        };
+                    })];
+            });
+        });
+    };
+    return WebSocketTransport;
+}(hw_transport_1["default"]));
+exports["default"] = WebSocketTransport;
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
+},{"@ledgerhq/errors":53,"@ledgerhq/hw-transport":54,"@ledgerhq/logs":55,"buffer":61,"ws":56}],52:[function(require,module,exports){
+"use strict";
+/* eslint-disable no-continue */
+/* eslint-disable no-unused-vars */
+/* eslint-disable no-param-reassign */
+/* eslint-disable no-prototype-builtins */
+var __values = (this && this.__values) || function(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+};
+exports.__esModule = true;
+exports.serializeError = exports.deserializeError = exports.createCustomErrorClass = exports.addCustomErrorDeserializer = void 0;
+var errorClasses = {};
+var deserializers = {};
+var addCustomErrorDeserializer = function (name, deserializer) {
+    deserializers[name] = deserializer;
+};
+exports.addCustomErrorDeserializer = addCustomErrorDeserializer;
+var createCustomErrorClass = function (name) {
+    var C = function CustomError(message, fields) {
+        Object.assign(this, fields);
+        this.name = name;
+        this.message = message || name;
+        this.stack = new Error().stack;
+    };
+    C.prototype = new Error();
+    errorClasses[name] = C;
+    return C;
+};
+exports.createCustomErrorClass = createCustomErrorClass;
+// inspired from https://github.com/programble/errio/blob/master/index.js
+var deserializeError = function (object) {
+    if (typeof object === "object" && object) {
+        try {
+            // $FlowFixMe FIXME HACK
+            var msg = JSON.parse(object.message);
+            if (msg.message && msg.name) {
+                object = msg;
+            }
+        }
+        catch (e) {
+            // nothing
+        }
+        var error = void 0;
+        if (typeof object.name === "string") {
+            var name_1 = object.name;
+            var des = deserializers[name_1];
+            if (des) {
+                error = des(object);
+            }
+            else {
+                var constructor = name_1 === "Error" ? Error : errorClasses[name_1];
+                if (!constructor) {
+                    console.warn("deserializing an unknown class '" + name_1 + "'");
+                    constructor = exports.createCustomErrorClass(name_1);
+                }
+                error = Object.create(constructor.prototype);
+                try {
+                    for (var prop in object) {
+                        if (object.hasOwnProperty(prop)) {
+                            error[prop] = object[prop];
+                        }
+                    }
+                }
+                catch (e) {
+                    // sometimes setting a property can fail (e.g. .name)
+                }
+            }
+        }
+        else {
+            error = new Error(object.message);
+        }
+        if (!error.stack && Error.captureStackTrace) {
+            Error.captureStackTrace(error, exports.deserializeError);
+        }
+        return error;
+    }
+    return new Error(String(object));
+};
+exports.deserializeError = deserializeError;
+// inspired from https://github.com/sindresorhus/serialize-error/blob/master/index.js
+var serializeError = function (value) {
+    if (!value)
+        return value;
+    if (typeof value === "object") {
+        return destroyCircular(value, []);
+    }
+    if (typeof value === "function") {
+        return "[Function: " + (value.name || "anonymous") + "]";
+    }
+    return value;
+};
+exports.serializeError = serializeError;
+// https://www.npmjs.com/package/destroy-circular
+function destroyCircular(from, seen) {
+    var e_1, _a;
+    var to = {};
+    seen.push(from);
+    try {
+        for (var _b = __values(Object.keys(from)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var key = _c.value;
+            var value = from[key];
+            if (typeof value === "function") {
+                continue;
+            }
+            if (!value || typeof value !== "object") {
+                to[key] = value;
+                continue;
+            }
+            if (seen.indexOf(from[key]) === -1) {
+                to[key] = destroyCircular(from[key], seen.slice(0));
+                continue;
+            }
+            to[key] = "[Circular]";
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b["return"])) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    if (typeof from.name === "string") {
+        to.name = from.name;
+    }
+    if (typeof from.message === "string") {
+        to.message = from.message;
+    }
+    if (typeof from.stack === "string") {
+        to.stack = from.stack;
+    }
+    return to;
+}
+
+},{}],53:[function(require,module,exports){
+"use strict";
+exports.__esModule = true;
+exports.NotEnoughBalanceInParentAccount = exports.NotEnoughBalanceToDelegate = exports.NotEnoughBalance = exports.NoAddressesFound = exports.NetworkDown = exports.ManagerUninstallBTCDep = exports.ManagerNotEnoughSpaceError = exports.ManagerFirmwareNotEnoughSpaceError = exports.ManagerDeviceLockedError = exports.ManagerAppDepUninstallRequired = exports.ManagerAppDepInstallRequired = exports.ManagerAppRelyOnBTCError = exports.ManagerAppAlreadyInstalledError = exports.LedgerAPINotAvailable = exports.LedgerAPIErrorWithMessage = exports.LedgerAPIError = exports.UnknownMCU = exports.LatestMCUInstalledError = exports.InvalidAddressBecauseDestinationIsAlsoSource = exports.InvalidAddress = exports.InvalidXRPTag = exports.HardResetFail = exports.FirmwareNotRecognized = exports.FeeEstimationFailed = exports.EthAppPleaseEnableContractData = exports.EnpointConfigError = exports.DisconnectedDeviceDuringOperation = exports.DisconnectedDevice = exports.DeviceSocketNoBulkStatus = exports.DeviceSocketFail = exports.DeviceNameInvalid = exports.DeviceHalted = exports.DeviceInOSUExpected = exports.DeviceOnDashboardUnexpected = exports.DeviceOnDashboardExpected = exports.DeviceNotGenuineError = exports.DeviceGenuineSocketEarlyClose = exports.DeviceAppVerifyNotSupported = exports.CurrencyNotSupported = exports.CashAddrNotSupported = exports.CantOpenDevice = exports.BtcUnmatchedApp = exports.BluetoothRequired = exports.AmountRequired = exports.AccountNotSupported = exports.AccountNameRequiredError = exports.addCustomErrorDeserializer = exports.createCustomErrorClass = exports.deserializeError = exports.serializeError = void 0;
+exports.StatusCodes = exports.TransportError = exports.DBNotReset = exports.DBWrongPassword = exports.NoDBPathGiven = exports.FirmwareOrAppUpdateRequired = exports.LedgerAPI5xx = exports.LedgerAPI4xx = exports.GenuineCheckFailed = exports.PairingFailed = exports.SyncError = exports.FeeTooHigh = exports.FeeRequired = exports.FeeNotLoaded = exports.CantScanQRCode = exports.ETHAddressNonEIP = exports.WrongAppForCurrency = exports.WrongDeviceForAccount = exports.WebsocketConnectionFailed = exports.WebsocketConnectionError = exports.DeviceShouldStayInApp = exports.TransportWebUSBGestureRequired = exports.TransportRaceCondition = exports.TransportInterfaceNotAvailable = exports.TransportOpenUserCancelled = exports.UserRefusedOnDevice = exports.UserRefusedAllowManager = exports.UserRefusedFirmwareUpdate = exports.UserRefusedAddress = exports.UserRefusedDeviceNameChange = exports.UpdateYourApp = exports.UpdateIncorrectSig = exports.UpdateIncorrectHash = exports.UpdateFetchFileFail = exports.UnavailableTezosOriginatedAccountSend = exports.UnavailableTezosOriginatedAccountReceive = exports.RecipientRequired = exports.MCUNotGenuineToDashboard = exports.UnexpectedBootloader = exports.TimeoutTagged = exports.RecommendUndelegation = exports.RecommendSubAccountsToEmpty = exports.PasswordIncorrectError = exports.PasswordsDontMatchError = exports.GasLessThanEstimate = exports.NotSupportedLegacyAddress = exports.NotEnoughGas = exports.NoAccessToCamera = exports.NotEnoughBalanceBecauseDestinationNotCreated = exports.NotEnoughSpendableBalance = void 0;
+exports.TransportStatusError = exports.getAltStatusMessage = void 0;
+var helpers_1 = require("./helpers");
+exports.serializeError = helpers_1.serializeError;
+exports.deserializeError = helpers_1.deserializeError;
+exports.createCustomErrorClass = helpers_1.createCustomErrorClass;
+exports.addCustomErrorDeserializer = helpers_1.addCustomErrorDeserializer;
+exports.AccountNameRequiredError = helpers_1.createCustomErrorClass("AccountNameRequired");
+exports.AccountNotSupported = helpers_1.createCustomErrorClass("AccountNotSupported");
+exports.AmountRequired = helpers_1.createCustomErrorClass("AmountRequired");
+exports.BluetoothRequired = helpers_1.createCustomErrorClass("BluetoothRequired");
+exports.BtcUnmatchedApp = helpers_1.createCustomErrorClass("BtcUnmatchedApp");
+exports.CantOpenDevice = helpers_1.createCustomErrorClass("CantOpenDevice");
+exports.CashAddrNotSupported = helpers_1.createCustomErrorClass("CashAddrNotSupported");
+exports.CurrencyNotSupported = helpers_1.createCustomErrorClass("CurrencyNotSupported");
+exports.DeviceAppVerifyNotSupported = helpers_1.createCustomErrorClass("DeviceAppVerifyNotSupported");
+exports.DeviceGenuineSocketEarlyClose = helpers_1.createCustomErrorClass("DeviceGenuineSocketEarlyClose");
+exports.DeviceNotGenuineError = helpers_1.createCustomErrorClass("DeviceNotGenuine");
+exports.DeviceOnDashboardExpected = helpers_1.createCustomErrorClass("DeviceOnDashboardExpected");
+exports.DeviceOnDashboardUnexpected = helpers_1.createCustomErrorClass("DeviceOnDashboardUnexpected");
+exports.DeviceInOSUExpected = helpers_1.createCustomErrorClass("DeviceInOSUExpected");
+exports.DeviceHalted = helpers_1.createCustomErrorClass("DeviceHalted");
+exports.DeviceNameInvalid = helpers_1.createCustomErrorClass("DeviceNameInvalid");
+exports.DeviceSocketFail = helpers_1.createCustomErrorClass("DeviceSocketFail");
+exports.DeviceSocketNoBulkStatus = helpers_1.createCustomErrorClass("DeviceSocketNoBulkStatus");
+exports.DisconnectedDevice = helpers_1.createCustomErrorClass("DisconnectedDevice");
+exports.DisconnectedDeviceDuringOperation = helpers_1.createCustomErrorClass("DisconnectedDeviceDuringOperation");
+exports.EnpointConfigError = helpers_1.createCustomErrorClass("EnpointConfig");
+exports.EthAppPleaseEnableContractData = helpers_1.createCustomErrorClass("EthAppPleaseEnableContractData");
+exports.FeeEstimationFailed = helpers_1.createCustomErrorClass("FeeEstimationFailed");
+exports.FirmwareNotRecognized = helpers_1.createCustomErrorClass("FirmwareNotRecognized");
+exports.HardResetFail = helpers_1.createCustomErrorClass("HardResetFail");
+exports.InvalidXRPTag = helpers_1.createCustomErrorClass("InvalidXRPTag");
+exports.InvalidAddress = helpers_1.createCustomErrorClass("InvalidAddress");
+exports.InvalidAddressBecauseDestinationIsAlsoSource = helpers_1.createCustomErrorClass("InvalidAddressBecauseDestinationIsAlsoSource");
+exports.LatestMCUInstalledError = helpers_1.createCustomErrorClass("LatestMCUInstalledError");
+exports.UnknownMCU = helpers_1.createCustomErrorClass("UnknownMCU");
+exports.LedgerAPIError = helpers_1.createCustomErrorClass("LedgerAPIError");
+exports.LedgerAPIErrorWithMessage = helpers_1.createCustomErrorClass("LedgerAPIErrorWithMessage");
+exports.LedgerAPINotAvailable = helpers_1.createCustomErrorClass("LedgerAPINotAvailable");
+exports.ManagerAppAlreadyInstalledError = helpers_1.createCustomErrorClass("ManagerAppAlreadyInstalled");
+exports.ManagerAppRelyOnBTCError = helpers_1.createCustomErrorClass("ManagerAppRelyOnBTC");
+exports.ManagerAppDepInstallRequired = helpers_1.createCustomErrorClass("ManagerAppDepInstallRequired");
+exports.ManagerAppDepUninstallRequired = helpers_1.createCustomErrorClass("ManagerAppDepUninstallRequired");
+exports.ManagerDeviceLockedError = helpers_1.createCustomErrorClass("ManagerDeviceLocked");
+exports.ManagerFirmwareNotEnoughSpaceError = helpers_1.createCustomErrorClass("ManagerFirmwareNotEnoughSpace");
+exports.ManagerNotEnoughSpaceError = helpers_1.createCustomErrorClass("ManagerNotEnoughSpace");
+exports.ManagerUninstallBTCDep = helpers_1.createCustomErrorClass("ManagerUninstallBTCDep");
+exports.NetworkDown = helpers_1.createCustomErrorClass("NetworkDown");
+exports.NoAddressesFound = helpers_1.createCustomErrorClass("NoAddressesFound");
+exports.NotEnoughBalance = helpers_1.createCustomErrorClass("NotEnoughBalance");
+exports.NotEnoughBalanceToDelegate = helpers_1.createCustomErrorClass("NotEnoughBalanceToDelegate");
+exports.NotEnoughBalanceInParentAccount = helpers_1.createCustomErrorClass("NotEnoughBalanceInParentAccount");
+exports.NotEnoughSpendableBalance = helpers_1.createCustomErrorClass("NotEnoughSpendableBalance");
+exports.NotEnoughBalanceBecauseDestinationNotCreated = helpers_1.createCustomErrorClass("NotEnoughBalanceBecauseDestinationNotCreated");
+exports.NoAccessToCamera = helpers_1.createCustomErrorClass("NoAccessToCamera");
+exports.NotEnoughGas = helpers_1.createCustomErrorClass("NotEnoughGas");
+exports.NotSupportedLegacyAddress = helpers_1.createCustomErrorClass("NotSupportedLegacyAddress");
+exports.GasLessThanEstimate = helpers_1.createCustomErrorClass("GasLessThanEstimate");
+exports.PasswordsDontMatchError = helpers_1.createCustomErrorClass("PasswordsDontMatch");
+exports.PasswordIncorrectError = helpers_1.createCustomErrorClass("PasswordIncorrect");
+exports.RecommendSubAccountsToEmpty = helpers_1.createCustomErrorClass("RecommendSubAccountsToEmpty");
+exports.RecommendUndelegation = helpers_1.createCustomErrorClass("RecommendUndelegation");
+exports.TimeoutTagged = helpers_1.createCustomErrorClass("TimeoutTagged");
+exports.UnexpectedBootloader = helpers_1.createCustomErrorClass("UnexpectedBootloader");
+exports.MCUNotGenuineToDashboard = helpers_1.createCustomErrorClass("MCUNotGenuineToDashboard");
+exports.RecipientRequired = helpers_1.createCustomErrorClass("RecipientRequired");
+exports.UnavailableTezosOriginatedAccountReceive = helpers_1.createCustomErrorClass("UnavailableTezosOriginatedAccountReceive");
+exports.UnavailableTezosOriginatedAccountSend = helpers_1.createCustomErrorClass("UnavailableTezosOriginatedAccountSend");
+exports.UpdateFetchFileFail = helpers_1.createCustomErrorClass("UpdateFetchFileFail");
+exports.UpdateIncorrectHash = helpers_1.createCustomErrorClass("UpdateIncorrectHash");
+exports.UpdateIncorrectSig = helpers_1.createCustomErrorClass("UpdateIncorrectSig");
+exports.UpdateYourApp = helpers_1.createCustomErrorClass("UpdateYourApp");
+exports.UserRefusedDeviceNameChange = helpers_1.createCustomErrorClass("UserRefusedDeviceNameChange");
+exports.UserRefusedAddress = helpers_1.createCustomErrorClass("UserRefusedAddress");
+exports.UserRefusedFirmwareUpdate = helpers_1.createCustomErrorClass("UserRefusedFirmwareUpdate");
+exports.UserRefusedAllowManager = helpers_1.createCustomErrorClass("UserRefusedAllowManager");
+exports.UserRefusedOnDevice = helpers_1.createCustomErrorClass("UserRefusedOnDevice"); // TODO rename because it's just for transaction refusal
+exports.TransportOpenUserCancelled = helpers_1.createCustomErrorClass("TransportOpenUserCancelled");
+exports.TransportInterfaceNotAvailable = helpers_1.createCustomErrorClass("TransportInterfaceNotAvailable");
+exports.TransportRaceCondition = helpers_1.createCustomErrorClass("TransportRaceCondition");
+exports.TransportWebUSBGestureRequired = helpers_1.createCustomErrorClass("TransportWebUSBGestureRequired");
+exports.DeviceShouldStayInApp = helpers_1.createCustomErrorClass("DeviceShouldStayInApp");
+exports.WebsocketConnectionError = helpers_1.createCustomErrorClass("WebsocketConnectionError");
+exports.WebsocketConnectionFailed = helpers_1.createCustomErrorClass("WebsocketConnectionFailed");
+exports.WrongDeviceForAccount = helpers_1.createCustomErrorClass("WrongDeviceForAccount");
+exports.WrongAppForCurrency = helpers_1.createCustomErrorClass("WrongAppForCurrency");
+exports.ETHAddressNonEIP = helpers_1.createCustomErrorClass("ETHAddressNonEIP");
+exports.CantScanQRCode = helpers_1.createCustomErrorClass("CantScanQRCode");
+exports.FeeNotLoaded = helpers_1.createCustomErrorClass("FeeNotLoaded");
+exports.FeeRequired = helpers_1.createCustomErrorClass("FeeRequired");
+exports.FeeTooHigh = helpers_1.createCustomErrorClass("FeeTooHigh");
+exports.SyncError = helpers_1.createCustomErrorClass("SyncError");
+exports.PairingFailed = helpers_1.createCustomErrorClass("PairingFailed");
+exports.GenuineCheckFailed = helpers_1.createCustomErrorClass("GenuineCheckFailed");
+exports.LedgerAPI4xx = helpers_1.createCustomErrorClass("LedgerAPI4xx");
+exports.LedgerAPI5xx = helpers_1.createCustomErrorClass("LedgerAPI5xx");
+exports.FirmwareOrAppUpdateRequired = helpers_1.createCustomErrorClass("FirmwareOrAppUpdateRequired");
+// db stuff, no need to translate
+exports.NoDBPathGiven = helpers_1.createCustomErrorClass("NoDBPathGiven");
+exports.DBWrongPassword = helpers_1.createCustomErrorClass("DBWrongPassword");
+exports.DBNotReset = helpers_1.createCustomErrorClass("DBNotReset");
+/**
+ * TransportError is used for any generic transport errors.
+ * e.g. Error thrown when data received by exchanges are incorrect or if exchanged failed to communicate with the device for various reason.
+ */
+function TransportError(message, id) {
+    this.name = "TransportError";
+    this.message = message;
+    this.stack = new Error().stack;
+    this.id = id;
+}
+exports.TransportError = TransportError;
+TransportError.prototype = new Error();
+helpers_1.addCustomErrorDeserializer("TransportError", function (e) { return new TransportError(e.message, e.id); });
+exports.StatusCodes = {
+    PIN_REMAINING_ATTEMPTS: 0x63c0,
+    INCORRECT_LENGTH: 0x6700,
+    MISSING_CRITICAL_PARAMETER: 0x6800,
+    COMMAND_INCOMPATIBLE_FILE_STRUCTURE: 0x6981,
+    SECURITY_STATUS_NOT_SATISFIED: 0x6982,
+    CONDITIONS_OF_USE_NOT_SATISFIED: 0x6985,
+    INCORRECT_DATA: 0x6a80,
+    NOT_ENOUGH_MEMORY_SPACE: 0x6a84,
+    REFERENCED_DATA_NOT_FOUND: 0x6a88,
+    FILE_ALREADY_EXISTS: 0x6a89,
+    INCORRECT_P1_P2: 0x6b00,
+    INS_NOT_SUPPORTED: 0x6d00,
+    CLA_NOT_SUPPORTED: 0x6e00,
+    TECHNICAL_PROBLEM: 0x6f00,
+    OK: 0x9000,
+    MEMORY_PROBLEM: 0x9240,
+    NO_EF_SELECTED: 0x9400,
+    INVALID_OFFSET: 0x9402,
+    FILE_NOT_FOUND: 0x9404,
+    INCONSISTENT_FILE: 0x9408,
+    ALGORITHM_NOT_SUPPORTED: 0x9484,
+    INVALID_KCV: 0x9485,
+    CODE_NOT_INITIALIZED: 0x9802,
+    ACCESS_CONDITION_NOT_FULFILLED: 0x9804,
+    CONTRADICTION_SECRET_CODE_STATUS: 0x9808,
+    CONTRADICTION_INVALIDATION: 0x9810,
+    CODE_BLOCKED: 0x9840,
+    MAX_VALUE_REACHED: 0x9850,
+    GP_AUTH_FAILED: 0x6300,
+    LICENSING: 0x6f42,
+    HALTED: 0x6faa
+};
+function getAltStatusMessage(code) {
+    switch (code) {
+        // improve text of most common errors
+        case 0x6700:
+            return "Incorrect length";
+        case 0x6800:
+            return "Missing critical parameter";
+        case 0x6982:
+            return "Security not satisfied (dongle locked or have invalid access rights)";
+        case 0x6985:
+            return "Condition of use not satisfied (denied by the user?)";
+        case 0x6a80:
+            return "Invalid data received";
+        case 0x6b00:
+            return "Invalid parameter received";
+    }
+    if (0x6f00 <= code && code <= 0x6fff) {
+        return "Internal error, please report";
+    }
+}
+exports.getAltStatusMessage = getAltStatusMessage;
+/**
+ * Error thrown when a device returned a non success status.
+ * the error.statusCode is one of the `StatusCodes` exported by this library.
+ */
+function TransportStatusError(statusCode) {
+    this.name = "TransportStatusError";
+    var statusText = Object.keys(exports.StatusCodes).find(function (k) { return exports.StatusCodes[k] === statusCode; }) ||
+        "UNKNOWN_ERROR";
+    var smsg = getAltStatusMessage(statusCode) || statusText;
+    var statusCodeStr = statusCode.toString(16);
+    this.message = "Ledger device: " + smsg + " (0x" + statusCodeStr + ")";
+    this.stack = new Error().stack;
+    this.statusCode = statusCode;
+    this.statusText = statusText;
+}
+exports.TransportStatusError = TransportStatusError;
+TransportStatusError.prototype = new Error();
+helpers_1.addCustomErrorDeserializer("TransportStatusError", function (e) { return new TransportStatusError(e.statusCode); });
+
+},{"./helpers":52}],54:[function(require,module,exports){
+(function (Buffer){
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+var __read = (this && this.__read) || function (o, n) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator];
+    if (!m) return o;
+    var i = m.call(o), r, ar = [], e;
+    try {
+        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+    }
+    catch (error) { e = { error: error }; }
+    finally {
+        try {
+            if (r && !r.done && (m = i["return"])) m.call(i);
+        }
+        finally { if (e) throw e.error; }
+    }
+    return ar;
+};
+var __spreadArray = (this && this.__spreadArray) || function (to, from) {
+    for (var i = 0, il = from.length, j = to.length; i < il; i++, j++)
+        to[j] = from[i];
+    return to;
+};
+var __values = (this && this.__values) || function(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+exports.__esModule = true;
+exports.getAltStatusMessage = exports.StatusCodes = exports.TransportStatusError = exports.TransportError = void 0;
+var events_1 = __importDefault(require("events"));
+var errors_1 = require("@ledgerhq/errors");
+exports.TransportError = errors_1.TransportError;
+exports.StatusCodes = errors_1.StatusCodes;
+exports.getAltStatusMessage = errors_1.getAltStatusMessage;
+exports.TransportStatusError = errors_1.TransportStatusError;
+/**
+ * Transport defines the generic interface to share between node/u2f impl
+ * A **Descriptor** is a parametric type that is up to be determined for the implementation.
+ * it can be for instance an ID, an file path, a URL,...
+ */
+var Transport = /** @class */ (function () {
+    function Transport() {
+        var _this = this;
+        this.exchangeTimeout = 30000;
+        this.unresponsiveTimeout = 15000;
+        this.deviceModel = null;
+        this._events = new events_1["default"]();
+        /**
+         * wrapper on top of exchange to simplify work of the implementation.
+         * @param cla
+         * @param ins
+         * @param p1
+         * @param p2
+         * @param data
+         * @param statusList is a list of accepted status code (shorts). [0x9000] by default
+         * @return a Promise of response buffer
+         */
+        this.send = function (cla, ins, p1, p2, data, statusList) {
+            if (data === void 0) { data = Buffer.alloc(0); }
+            if (statusList === void 0) { statusList = [errors_1.StatusCodes.OK]; }
+            return __awaiter(_this, void 0, void 0, function () {
+                var response, sw;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            if (data.length >= 256) {
+                                throw new errors_1.TransportError("data.length exceed 256 bytes limit. Got: " + data.length, "DataLengthTooBig");
+                            }
+                            return [4 /*yield*/, this.exchange(Buffer.concat([
+                                    Buffer.from([cla, ins, p1, p2]),
+                                    Buffer.from([data.length]),
+                                    data,
+                                ]))];
+                        case 1:
+                            response = _a.sent();
+                            sw = response.readUInt16BE(response.length - 2);
+                            if (!statusList.some(function (s) { return s === sw; })) {
+                                throw new errors_1.TransportStatusError(sw);
+                            }
+                            return [2 /*return*/, response];
+                    }
+                });
+            });
+        };
+        this.exchangeAtomicImpl = function (f) { return __awaiter(_this, void 0, void 0, function () {
+            var resolveBusy, busyPromise, unresponsiveReached, timeout, res;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (this.exchangeBusyPromise) {
+                            throw new errors_1.TransportRaceCondition("An action was already pending on the Ledger device. Please deny or reconnect.");
+                        }
+                        busyPromise = new Promise(function (r) {
+                            resolveBusy = r;
+                        });
+                        this.exchangeBusyPromise = busyPromise;
+                        unresponsiveReached = false;
+                        timeout = setTimeout(function () {
+                            unresponsiveReached = true;
+                            _this.emit("unresponsive");
+                        }, this.unresponsiveTimeout);
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, , 3, 4]);
+                        return [4 /*yield*/, f()];
+                    case 2:
+                        res = _a.sent();
+                        if (unresponsiveReached) {
+                            this.emit("responsive");
+                        }
+                        return [2 /*return*/, res];
+                    case 3:
+                        clearTimeout(timeout);
+                        if (resolveBusy)
+                            resolveBusy();
+                        this.exchangeBusyPromise = null;
+                        return [7 /*endfinally*/];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        }); };
+        this._appAPIlock = null;
+    }
+    /**
+     * low level api to communicate with the device
+     * This method is for implementations to implement but should not be directly called.
+     * Instead, the recommanded way is to use send() method
+     * @param apdu the data to send
+     * @return a Promise of response data
+     */
+    Transport.prototype.exchange = function (_apdu) {
+        throw new Error("exchange not implemented");
+    };
+    /**
+     * set the "scramble key" for the next exchanges with the device.
+     * Each App can have a different scramble key and they internally will set it at instanciation.
+     * @param key the scramble key
+     */
+    Transport.prototype.setScrambleKey = function (_key) { };
+    /**
+     * close the exchange with the device.
+     * @return a Promise that ends when the transport is closed.
+     */
+    Transport.prototype.close = function () {
+        return Promise.resolve();
+    };
+    /**
+     * Listen to an event on an instance of transport.
+     * Transport implementation can have specific events. Here is the common events:
+     * * `"disconnect"` : triggered if Transport is disconnected
+     */
+    Transport.prototype.on = function (eventName, cb) {
+        this._events.on(eventName, cb);
+    };
+    /**
+     * Stop listening to an event on an instance of transport.
+     */
+    Transport.prototype.off = function (eventName, cb) {
+        this._events.removeListener(eventName, cb);
+    };
+    Transport.prototype.emit = function (event) {
+        var _a;
+        var args = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            args[_i - 1] = arguments[_i];
+        }
+        (_a = this._events).emit.apply(_a, __spreadArray([event], __read(args)));
+    };
+    /**
+     * Enable or not logs of the binary exchange
+     */
+    Transport.prototype.setDebugMode = function () {
+        console.warn("setDebugMode is deprecated. use @ledgerhq/logs instead. No logs are emitted in this anymore.");
+    };
+    /**
+     * Set a timeout (in milliseconds) for the exchange call. Only some transport might implement it. (e.g. U2F)
+     */
+    Transport.prototype.setExchangeTimeout = function (exchangeTimeout) {
+        this.exchangeTimeout = exchangeTimeout;
+    };
+    /**
+     * Define the delay before emitting "unresponsive" on an exchange that does not respond
+     */
+    Transport.prototype.setExchangeUnresponsiveTimeout = function (unresponsiveTimeout) {
+        this.unresponsiveTimeout = unresponsiveTimeout;
+    };
+    /**
+     * create() allows to open the first descriptor available or
+     * throw if there is none or if timeout is reached.
+     * This is a light helper, alternative to using listen() and open() (that you may need for any more advanced usecase)
+     * @example
+    TransportFoo.create().then(transport => ...)
+     */
+    Transport.create = function (openTimeout, listenTimeout) {
+        var _this = this;
+        if (openTimeout === void 0) { openTimeout = 3000; }
+        return new Promise(function (resolve, reject) {
+            var found = false;
+            var sub = _this.listen({
+                next: function (e) {
+                    found = true;
+                    if (sub)
+                        sub.unsubscribe();
+                    if (listenTimeoutId)
+                        clearTimeout(listenTimeoutId);
+                    _this.open(e.descriptor, openTimeout).then(resolve, reject);
+                },
+                error: function (e) {
+                    if (listenTimeoutId)
+                        clearTimeout(listenTimeoutId);
+                    reject(e);
+                },
+                complete: function () {
+                    if (listenTimeoutId)
+                        clearTimeout(listenTimeoutId);
+                    if (!found) {
+                        reject(new errors_1.TransportError(_this.ErrorMessage_NoDeviceFound, "NoDeviceFound"));
+                    }
+                }
+            });
+            var listenTimeoutId = listenTimeout
+                ? setTimeout(function () {
+                    sub.unsubscribe();
+                    reject(new errors_1.TransportError(_this.ErrorMessage_ListenTimeout, "ListenTimeout"));
+                }, listenTimeout)
+                : null;
+        });
+    };
+    Transport.prototype.decorateAppAPIMethods = function (self, methods, scrambleKey) {
+        var e_1, _a;
+        try {
+            for (var methods_1 = __values(methods), methods_1_1 = methods_1.next(); !methods_1_1.done; methods_1_1 = methods_1.next()) {
+                var methodName = methods_1_1.value;
+                self[methodName] = this.decorateAppAPIMethod(methodName, self[methodName], self, scrambleKey);
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (methods_1_1 && !methods_1_1.done && (_a = methods_1["return"])) _a.call(methods_1);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+    };
+    Transport.prototype.decorateAppAPIMethod = function (methodName, f, ctx, scrambleKey) {
+        var _this = this;
+        return function () {
+            var args = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                args[_i] = arguments[_i];
+            }
+            return __awaiter(_this, void 0, void 0, function () {
+                var _appAPIlock;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            _appAPIlock = this._appAPIlock;
+                            if (_appAPIlock) {
+                                return [2 /*return*/, Promise.reject(new errors_1.TransportError("Ledger Device is busy (lock " + _appAPIlock + ")", "TransportLocked"))];
+                            }
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, , 3, 4]);
+                            this._appAPIlock = methodName;
+                            this.setScrambleKey(scrambleKey);
+                            return [4 /*yield*/, f.apply(ctx, args)];
+                        case 2: return [2 /*return*/, _a.sent()];
+                        case 3:
+                            this._appAPIlock = null;
+                            return [7 /*endfinally*/];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        };
+    };
+    Transport.ErrorMessage_ListenTimeout = "No Ledger device found (timeout)";
+    Transport.ErrorMessage_NoDeviceFound = "No Ledger device found";
+    return Transport;
+}());
+exports["default"] = Transport;
+
+}).call(this,require("buffer").Buffer)
+},{"@ledgerhq/errors":53,"buffer":61,"events":62}],55:[function(require,module,exports){
+"use strict";
+exports.__esModule = true;
+exports.listen = exports.log = void 0;
+var id = 0;
+var subscribers = [];
+/**
+ * log something
+ * @param type a namespaced identifier of the log (it is not a level like "debug", "error" but more like "apdu-in", "apdu-out", etc...)
+ * @param message a clear message of the log associated to the type
+ */
+var log = function (type, message, data) {
+    var obj = {
+        type: type,
+        id: String(++id),
+        date: new Date()
+    };
+    if (message)
+        obj.message = message;
+    if (data)
+        obj.data = data;
+    dispatch(obj);
+};
+exports.log = log;
+/**
+ * listen to logs.
+ * @param cb that is called for each future log() with the Log object
+ * @return a function that can be called to unsubscribe the listener
+ */
+var listen = function (cb) {
+    subscribers.push(cb);
+    return function () {
+        var i = subscribers.indexOf(cb);
+        if (i !== -1) {
+            // equivalent of subscribers.splice(i, 1) // https://twitter.com/Rich_Harris/status/1125850391155965952
+            subscribers[i] = subscribers[subscribers.length - 1];
+            subscribers.pop();
+        }
+    };
+};
+exports.listen = listen;
+function dispatch(log) {
+    for (var i = 0; i < subscribers.length; i++) {
+        try {
+            subscribers[i](log);
+        }
+        catch (e) {
+            console.error(e);
+        }
+    }
+}
+if (typeof window !== "undefined") {
+    window.__ledgerLogsListen = exports.listen;
+}
+
+},{}],56:[function(require,module,exports){
+'use strict';
+
+module.exports = function () {
+  throw new Error(
+    'ws does not work in the browser. Browser clients must use the native ' +
+      'WebSocket object'
+  );
+};
+
+},{}],57:[function(require,module,exports){
+(function (global,Buffer){
+"use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
@@ -3280,7 +4330,7 @@ TransportWebHID.listen = observer => {
 };
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
-},{"@ledgerhq/devices":5,"@ledgerhq/devices/lib/hid-framing":4,"@ledgerhq/errors":50,"@ledgerhq/hw-transport":52,"@ledgerhq/logs":53,"buffer":55}],52:[function(require,module,exports){
+},{"@ledgerhq/devices":5,"@ledgerhq/devices/lib/hid-framing":4,"@ledgerhq/errors":50,"@ledgerhq/hw-transport":58,"@ledgerhq/logs":59,"buffer":61}],58:[function(require,module,exports){
 (function (Buffer){
 "use strict";
 
@@ -3539,7 +4589,7 @@ Transport.ErrorMessage_ListenTimeout = "No Ledger device found (timeout)";
 Transport.ErrorMessage_NoDeviceFound = "No Ledger device found";
 
 }).call(this,require("buffer").Buffer)
-},{"@ledgerhq/errors":50,"buffer":55,"events":56}],53:[function(require,module,exports){
+},{"@ledgerhq/errors":50,"buffer":61,"events":62}],59:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -3607,7 +4657,7 @@ if (typeof window !== "undefined") {
   window.__ledgerLogsListen = listen;
 }
 
-},{}],54:[function(require,module,exports){
+},{}],60:[function(require,module,exports){
 'use strict'
 
 exports.byteLength = byteLength
@@ -3760,7 +4810,7 @@ function fromByteArray (uint8) {
   return parts.join('')
 }
 
-},{}],55:[function(require,module,exports){
+},{}],61:[function(require,module,exports){
 (function (Buffer){
 /*!
  * The buffer module from node.js, for the browser.
@@ -5541,7 +6591,7 @@ function numberIsNaN (obj) {
 }
 
 }).call(this,require("buffer").Buffer)
-},{"base64-js":54,"buffer":55,"ieee754":57}],56:[function(require,module,exports){
+},{"base64-js":60,"buffer":61,"ieee754":63}],62:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -6066,7 +7116,7 @@ function functionBindPolyfill(context) {
   };
 }
 
-},{}],57:[function(require,module,exports){
+},{}],63:[function(require,module,exports){
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = (nBytes * 8) - mLen - 1
@@ -6152,7 +7202,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128
 }
 
-},{}],58:[function(require,module,exports){
+},{}],64:[function(require,module,exports){
 'use strict'
 
 // A linked list to keep track of recently-used-ness
@@ -6488,7 +7538,7 @@ const forEachStep = (self, fn, node, thisp) => {
 
 module.exports = LRUCache
 
-},{"yallist":61}],59:[function(require,module,exports){
+},{"yallist":67}],65:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -6674,7 +7724,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],60:[function(require,module,exports){
+},{}],66:[function(require,module,exports){
 'use strict'
 module.exports = function (Yallist) {
   Yallist.prototype[Symbol.iterator] = function* () {
@@ -6684,7 +7734,7 @@ module.exports = function (Yallist) {
   }
 }
 
-},{}],61:[function(require,module,exports){
+},{}],67:[function(require,module,exports){
 'use strict'
 module.exports = Yallist
 
@@ -7112,4 +8162,4 @@ try {
   require('./iterator.js')(Yallist)
 } catch (er) {}
 
-},{"./iterator.js":60}]},{},[3]);
+},{"./iterator.js":66}]},{},[3]);
