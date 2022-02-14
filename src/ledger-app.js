@@ -1,3 +1,4 @@
+'use strict'
 require('buffer')
 
 const CLA = 0xe0
@@ -10,7 +11,7 @@ const SW_CANCEL = 0x6985
 const SW_NOT_ALLOWED = 0x6c66
 const SW_UNSUPPORTED = 0x6d00
 
-export default class LedgerTon {
+export default class LedgerApp {
     constructor(transport, scrambleKey = "l0v") {
         this.transport = void 0
         this.transport = transport
@@ -41,7 +42,7 @@ export default class LedgerTon {
                 if (status === SW_OK) {
                     let offset = 1
                     let publicKey = response.slice(offset, offset + 32)
-                    return { publicKey }
+                    return {publicKey}
                 } else {
                     throw new Error('Failed to get public key')
                 }
@@ -59,7 +60,7 @@ export default class LedgerTon {
                 if (status === SW_OK) {
                     let offset = 1
                     let address = response.slice(offset, offset + 32)
-                    return { address }
+                    return {address}
                 } else {
                     throw new Error('Failed to get address')
                 }
@@ -82,7 +83,7 @@ export default class LedgerTon {
                 let status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0)
                 if (status === SW_OK) {
                     let signature = response.slice(1, response.length - 2)
-                    return { signature }
+                    return {signature}
                 } else if (status === SW_CANCEL) {
                     throw new Error('Transaction approval request was rejected')
                 } else if (status === SW_UNSUPPORTED) {

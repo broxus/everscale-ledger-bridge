@@ -1,9 +1,9 @@
 'use strict'
-require('buffer')
 
 import TransportWebHID from '@ledgerhq/hw-transport-webhid'
-import LedgerTon from "./hw-app-ton";
 import WebSocketTransport from '@ledgerhq/hw-transport-http/lib/WebSocketTransport'
+
+import LedgerApp from "./ledger-app";
 
 // URL which triggers Ledger Live app to open and handle communication
 const BRIDGE_URL = 'ws://localhost:8435'
@@ -13,53 +13,49 @@ const TRANSPORT_CHECK_DELAY = 1000
 const TRANSPORT_CHECK_LIMIT = 120
 
 export default class LedgerBridge {
-    constructor () {
+    constructor() {
         this.addEventListeners()
         this.useLedgerLive = false
     }
 
-    addEventListeners () {
+    addEventListeners() {
         window.addEventListener('message', async e => {
             if (e && e.data && e.data.target === 'LEDGER-IFRAME') {
-                const { action, params } = e.data
+                const {action, params} = e.data
                 const replyAction = `${action}-reply`
 
                 switch (action) {
                     case 'ledger-get-configuration':
-                        this.getConfiguration(replyAction)
+                        await this.getConfiguration(replyAction)
                         break
                     case 'ledger-get-public-key':
-                        this.getPublicKey(replyAction, params.account)
+                        await this.getPublicKey(replyAction, params.account)
                         break
                     case 'ledger-get-address':
-                        this.getAddress(replyAction, params.account, params.contract)
+                        await this.getAddress(replyAction, params.account, params.contract)
                         break
                     case 'ledger-sign-message':
-                        this.signMessage(replyAction, params.account, params.message)
+                        await this.signMessage(replyAction, params.account, params.message)
                         break
                     case 'ledger-close-bridge':
-                        this.cleanUp(replyAction)
+                        await this.cleanUp(replyAction)
                         break
                     case 'ledger-update-transport':
-                        this.updateLedgerLivePreference(replyAction, params.useLedgerLive)
+                        await this.updateLedgerLivePreference(replyAction, params.useLedgerLive)
                         break
                 }
             }
         }, false)
     }
 
-    sendMessageToExtension (msg) {
+    sendMessageToExtension(msg) {
         window.parent.postMessage(msg, '*')
     }
 
-    delay (ms) {
-        return new Promise((success) => setTimeout(success, ms))
-    }
-
-    checkTransportLoop (i) {
+    checkTransportLoop(i) {
         const iterator = i || 0
         return WebSocketTransport.check(BRIDGE_URL).catch(async () => {
-            await this.delay(TRANSPORT_CHECK_DELAY)
+            await sleep(TRANSPORT_CHECK_DELAY)
             if (iterator < TRANSPORT_CHECK_LIMIT) {
                 return this.checkTransportLoop(iterator + 1)
             } else {
@@ -68,7 +64,7 @@ export default class LedgerBridge {
         })
     }
 
-    async makeApp () {
+    async makeApp() {
         try {
             if (this.useLedgerLive) {
                 let reestablish = false;
@@ -81,12 +77,11 @@ export default class LedgerBridge {
                 }
                 if (!this.app || reestablish) {
                     this.transport = await WebSocketTransport.open(BRIDGE_URL)
-                    this.app = new LedgerTon(this.transport)
+                    this.app = new LedgerApp(this.transport)
                 }
-            }
-            else {
+            } else {
                 this.transport = await TransportWebHID.create()
-                this.app = new LedgerTon(this.transport)
+                this.app = new LedgerApp(this.transport)
             }
         } catch (e) {
             console.log('LEDGER:::CREATE APP ERROR', e)
@@ -94,7 +89,7 @@ export default class LedgerBridge {
         }
     }
 
-    updateLedgerLivePreference (replyAction, useLedgerLive) {
+    updateLedgerLivePreference(replyAction, useLedgerLive) {
         this.useLedgerLive = useLedgerLive
         this.cleanUp()
         this.sendMessageToExtension({
@@ -103,7 +98,7 @@ export default class LedgerBridge {
         })
     }
 
-    cleanUp (replyAction) {
+    cleanUp(replyAction) {
         this.app = null
         if (this.transport) {
             this.transport.close()
@@ -116,7 +111,7 @@ export default class LedgerBridge {
         }
     }
 
-    async getConfiguration (replyAction) {
+    async getConfiguration(replyAction) {
         try {
             await this.makeApp()
             const res = await this.app.getConfiguration()
@@ -139,7 +134,7 @@ export default class LedgerBridge {
         }
     }
 
-    async getPublicKey (replyAction, account) {
+    async getPublicKey(replyAction, account) {
         try {
             await this.makeApp()
             const res = await this.app.getPublicKey(account)
@@ -162,7 +157,7 @@ export default class LedgerBridge {
         }
     }
 
-    async getAddress (replyAction, account, contract) {
+    async getAddress(replyAction, account, contract) {
         try {
             await this.makeApp()
             const res = await this.app.getAddress(account, contract)
@@ -185,7 +180,7 @@ export default class LedgerBridge {
         }
     }
 
-    async signMessage (replyAction, account, message) {
+    async signMessage(replyAction, account, message) {
         try {
             await this.makeApp()
 
@@ -209,7 +204,7 @@ export default class LedgerBridge {
         }
     }
 
-    ledgerErrToMessage (err) {
+    ledgerErrToMessage(err) {
         const isWrongAppError = (err) => String(err.message || err).includes('0x6700')
         const isLedgerLockedError = (err) => String(err.message || err).includes('0x6804')
         const isUserCanceledError = (err) => err.name && err.name.includes('TransportOpenUserCancelled')
@@ -243,4 +238,8 @@ export default class LedgerBridge {
         // Other
         return err.toString()
     }
+}
+
+function sleep(ms) {
+    return new Promise((success) => setTimeout(success, ms))
 }
