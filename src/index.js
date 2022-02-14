@@ -2,8 +2,6 @@
 const {Buffer} = require('buffer')
 window.Buffer = Buffer;
 
-console.log('hello', window.Buffer)
-
 // Initialize ledger bridge
 import LedgerBridge from './ledger-bridge'
 
@@ -16,5 +14,5 @@ import LedgerBridge from './ledger-bridge'
         button.addEventListener('click', () => bridge.getConfiguration())
     }
 
-    console.log(`Broxus < = > Ledger Bridge initialized from ${window.location}!`)
+    console.log(`EVER Wallet <=> Ledger Bridge initialized from ${window.location}!`)
 })()
