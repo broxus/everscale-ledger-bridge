@@ -68,7 +68,7 @@ export default class LedgerApp {
     }
 
     signMessage(account, message, _ctx) {
-        let data = Buffer.alloc(4)
+        let data = Buffer.alloc(4 + 8)
         data.writeUInt32BE(account, 0)
         data.writeUInt32BE(0, 4)
         data.writeUInt32BE(0, 8)
