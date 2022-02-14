@@ -1,21 +1,12 @@
 'use strict'
 
 import TransportWebHID from '@ledgerhq/hw-transport-webhid'
-import WebSocketTransport from '@ledgerhq/hw-transport-http/lib/WebSocketTransport'
 
 import LedgerApp from "./ledger-app";
-
-// URL which triggers Ledger Live app to open and handle communication
-const BRIDGE_URL = 'ws://localhost:8435'
-
-// Number of seconds to poll for Ledger Live and Ethereum app opening
-const TRANSPORT_CHECK_DELAY = 1000
-const TRANSPORT_CHECK_LIMIT = 120
 
 export default class LedgerBridge {
     constructor() {
         this.addEventListeners()
-        this.useLedgerLive = false
     }
 
     addEventListeners() {
@@ -40,9 +31,6 @@ export default class LedgerBridge {
                     case 'ledger-close-bridge':
                         await this.cleanUp(replyAction)
                         break
-                    case 'ledger-update-transport':
-                        await this.updateLedgerLivePreference(replyAction, params.useLedgerLive)
-                        break
                 }
             }
         }, false)
@@ -52,56 +40,20 @@ export default class LedgerBridge {
         window.parent.postMessage(msg, '*')
     }
 
-    checkTransportLoop(i) {
-        const iterator = i || 0
-        return WebSocketTransport.check(BRIDGE_URL).catch(async () => {
-            await sleep(TRANSPORT_CHECK_DELAY)
-            if (iterator < TRANSPORT_CHECK_LIMIT) {
-                return this.checkTransportLoop(iterator + 1)
-            } else {
-                throw new Error('Ledger transport check timeout')
-            }
-        })
-    }
-
     async makeApp() {
         try {
-            if (this.useLedgerLive) {
-                let reestablish = false;
-                try {
-                    await WebSocketTransport.check(BRIDGE_URL)
-                } catch (_err) {
-                    window.open('ledgerlive://bridge?appName=Ethereum')
-                    await this.checkTransportLoop()
-                    reestablish = true;
-                }
-                if (!this.app || reestablish) {
-                    this.transport = await WebSocketTransport.open(BRIDGE_URL)
-                    this.app = new LedgerApp(this.transport)
-                }
-            } else {
-                this.transport = await TransportWebHID.create()
-                this.app = new LedgerApp(this.transport)
-            }
+            this.transport = await TransportWebHID.create()
+            this.app = new LedgerApp(this.transport)
         } catch (e) {
             console.log('LEDGER:::CREATE APP ERROR', e)
             throw e
         }
     }
 
-    updateLedgerLivePreference(replyAction, useLedgerLive) {
-        this.useLedgerLive = useLedgerLive
-        this.cleanUp()
-        this.sendMessageToExtension({
-            action: replyAction,
-            success: true,
-        })
-    }
-
-    cleanUp(replyAction) {
+    async cleanUp(replyAction) {
         this.app = null
         if (this.transport) {
-            this.transport.close()
+            await this.transport.close()
         }
         if (replyAction) {
             this.sendMessageToExtension({
@@ -128,9 +80,7 @@ export default class LedgerBridge {
                 error: new Error(e.toString())
             })
         } finally {
-            if (!this.useLedgerLive) {
-                this.cleanUp()
-            }
+            await this.cleanUp()
         }
     }
 
@@ -151,9 +101,7 @@ export default class LedgerBridge {
                 error: new Error(e.toString())
             })
         } finally {
-            if (!this.useLedgerLive) {
-                this.cleanUp()
-            }
+            await this.cleanUp()
         }
     }
 
@@ -174,9 +122,7 @@ export default class LedgerBridge {
                 error: new Error(e.toString())
             })
         } finally {
-            if (!this.useLedgerLive) {
-                this.cleanUp()
-            }
+            await this.cleanUp()
         }
     }
 
@@ -198,9 +144,7 @@ export default class LedgerBridge {
                 error: new Error(e.toString())
             })
         } finally {
-            if (!this.useLedgerLive) {
-                this.cleanUp()
-            }
+            await this.cleanUp()
         }
     }
 
@@ -238,8 +182,4 @@ export default class LedgerBridge {
         // Other
         return err.toString()
     }
-}
-
-function sleep(ms) {
-    return new Promise((success) => setTimeout(success, ms))
 }
