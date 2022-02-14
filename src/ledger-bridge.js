@@ -126,11 +126,11 @@ export default class LedgerBridge {
         }
     }
 
-    async signMessage(replyAction, account, message) {
+    async signMessage(replyAction, account, message, ctx) {
         try {
             await this.makeApp()
 
-            const res = await this.app.signMessage(account, message)
+            const res = await this.app.signMessage(account, message, ctx)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: true,
