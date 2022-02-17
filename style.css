@@ -10,8 +10,13 @@
     src: url('./fonts/PT-Root-UI-Bold.ttf');
 }
 
+body {
+    margin: 0;
+    padding: 0;
+}
+
 .connect-ledger {
-    height: 90vh;
+    height: 100vh;
     display: flex;
     justify-content: space-between;
     flex-direction: column;
@@ -81,5 +86,3 @@
      color: #027bb8;
      background-color: #ffffff;
  }
-
-
