@@ -26,7 +26,7 @@ export default class LedgerBridge {
                         await this.getAddress(replyAction, params.account, params.contract)
                         break
                     case 'ledger-sign-message':
-                        await this.signMessage(replyAction, params.account, params.message)
+                        await this.signMessage(replyAction, params.account, params.message, params.context)
                         break
                     case 'ledger-close-bridge':
                         await this.cleanUp(replyAction)
