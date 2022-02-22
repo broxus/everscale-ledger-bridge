@@ -67,13 +67,23 @@ export default class LedgerApp {
             })
     }
 
-    signMessage(account, message, _ctx) {
-        let data = Buffer.alloc(4 + 8)
+    signMessage(account, message, ctx) {
+        let data = Buffer.alloc(4)
         data.writeUInt32BE(account, 0)
-        data.writeUInt32BE(0, 4)
-        data.writeUInt32BE(0, 8)
-        let buffer = [data, Buffer.alloc(32), message]
+
+        let amount = Buffer.alloc(8)
+        if (ctx && ctx.amount) {
+            amount.writeBigUInt64BE(BigInt(ctx.amount), 0)
+        }
+
+        let address = Buffer.alloc(32)
+        if (ctx && ctx.address) {
+            address.write(ctx.address.split(':').reverse()[0], 'hex')
+        }
+
+        let buffer = [data, amount, address, message]
         let apdus = Buffer.concat(buffer)
+
         return this.transport
             .send(CLA, INS_SIGN, 0x00, 0x00, apdus, [
                 SW_OK,
