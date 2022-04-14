@@ -76,12 +76,25 @@ export default class LedgerApp {
             amount.writeBigUInt64BE(BigInt(ctx.amount), 0)
         }
 
-        let address = Buffer.alloc(32)
-        if (ctx && ctx.address) {
-            address.write(ctx.address.split(':').reverse()[0], 'hex')
+        let decimals = Buffer.alloc(1)
+        if (ctx && ctx.decimals) {
+            decimals.writeUInt8(parseInt(ctx.decimals, 10), 0)
         }
 
-        let buffer = [data, amount, address, message]
+        let asset = Buffer.alloc(32)
+        if (ctx && ctx.asset) {
+            asset.write(ctx.asset, 'utf-8')
+        }
+
+        let address = Buffer.alloc(32)
+        let workChain = Buffer.alloc(1)
+        if (ctx && ctx.address) {
+            const parts = ctx.address.split(':')
+            workChain.writeInt8(parseInt(parts[0]), 0)
+            address.write(parts[1], 'hex')
+        }
+
+        let buffer = [data, amount, asset, decimals, workChain, address, message]
         let apdus = Buffer.concat(buffer)
 
         return this.transport
