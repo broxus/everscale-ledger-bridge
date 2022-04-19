@@ -71,9 +71,16 @@ export default class LedgerApp {
         let data = Buffer.alloc(4)
         data.writeUInt32BE(account, 0)
 
+        // TODO: allocate 16 bytes for uint128
         let amount = Buffer.alloc(8)
         if (ctx && ctx.amount) {
-            amount.writeBigUInt64BE(BigInt(ctx.amount), 0)
+            // TEMP
+            const maxAllowed = BigInt('18446744073709551615')
+            let number = BigInt(ctx.amount)
+            if (number > maxAllowed) {
+                number = maxAllowed
+            }
+            amount.writeBigUInt64BE(number, 0)
         }
 
         let decimals = Buffer.alloc(1)
