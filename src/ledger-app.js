@@ -75,7 +75,7 @@ export default class LedgerApp {
         if (ctx && ctx.amount) {
             let number = BigInt(ctx.amount)
             amount.writeBigUInt64BE(number >> 64n, 0)
-            amount.writeBigUInt64BE(number & 0xffffffffffffffffn, 0)
+            amount.writeBigUInt64BE(number & 0xffffffffffffffffn, 8)
         }
 
         let decimals = Buffer.alloc(1)
