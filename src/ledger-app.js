@@ -72,14 +72,50 @@ export default class LedgerApp {
         data.writeUInt32BE(account, 0)
 
         let amount = Buffer.alloc(16)
-        if (ctx && ctx.amount) {
+        if (ctx && ctx.amount != null && ctx.decimals != null) {
             let number = BigInt(ctx.amount)
+
+            // BEGIN TEMP (until ledger display buffer is fixed)
+            const maxDisplayBufferLen = 17;
+
+            const formatted = number.toString();
+            let intLength = formatted.length;
+
+            let decimals = parseInt(ctx.decimals, 10);
+            if (intLength <= decimals) {
+                while (decimals > maxDisplayBufferLen) {
+                    number /= 10n;
+                    decimals -= 1;
+                }
+            } else {
+                const formattedDecimals = formatted.slice(-decimals);
+
+                while (decimals > 0) {
+                    if (formattedDecimals[decimals - 1] !== '0') {
+                        break;
+                    }
+                    number /= 10n;
+                    intLength -= 1;
+                    decimals -= 1;
+                }
+
+                while ((intLength + (decimals > 0 ? 1 : 0)) > maxDisplayBufferLen) {
+                    number /= 10n;
+                    intLength -= 1;
+                    if (decimals > 0) {
+                        decimals -= 1;
+                    }
+                }
+            }
+            ctx.decimals = decimals;
+            // END TEMP
+
             amount.writeBigUInt64BE(number >> 64n, 0)
             amount.writeBigUInt64BE(number & 0xffffffffffffffffn, 8)
         }
 
         let decimals = Buffer.alloc(1)
-        if (ctx && ctx.decimals) {
+        if (ctx && ctx.decimals != null) {
             decimals.writeUInt8(parseInt(ctx.decimals, 10), 0)
         }
 
