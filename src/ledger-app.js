@@ -121,7 +121,13 @@ export default class LedgerApp {
 
         let asset = Buffer.alloc(32)
         if (ctx && ctx.asset) {
-            asset.write(ctx.asset, 'utf-8')
+            if (ctx.asset.includes('-LP-')) {
+                asset.write('LP', 'utf-8')
+            } else if (ctx.asset.length > 7) {
+                asset.write(ctx.asset.substring(0, 6) + '..', 'utf-8')
+            } else {
+                asset.write(ctx.asset, 'utf-8')
+            }
         }
 
         let address = Buffer.alloc(32)
