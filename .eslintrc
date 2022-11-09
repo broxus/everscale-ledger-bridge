@@ -1,8 +1,9 @@
 {
-  "parser": "babel-eslint",
+  "parser": "@babel/eslint-parser",
   "parserOptions": {
+    "requireConfigFile": false,
     "sourceType": "module",
-    "ecmaVersion": 2017,
+    "ecmaVersion": 2020,
     "ecmaFeatures": {
       "experimentalObjectRestSpread": true,
       "impliedStrict": true,
@@ -14,21 +15,17 @@
       "templateStrings": true,
       "classes": true,
       "jsx": true
-    },
+    }
   },
 
   "env": {
-    "es6": true,
+    "es2020": true,
     "node": true,
     "browser": true,
     "mocha" : true
   },
 
-  "plugins": [
-    "mocha",
-    "chai",
-    "json"
-  ],
+  "plugins": [],
 
   "globals": {},
 
@@ -137,7 +134,6 @@
     "semi": [2, "never"],
     "semi-spacing": [2, { "before": false, "after": true }],
     "space-before-blocks": [1, "always"],
-    "space-before-function-paren": [1, "always"],
     "space-in-parens": [1, "never"],
     "space-infix-ops": 2,
     "space-unary-ops": [2, { "words": true, "nonwords": false }],
@@ -149,6 +145,6 @@
     "wrap-iife": [2, "any"],
     "yield-star-spacing": [2, "both"],
     "yoda": [2, "never"],
-    "prefer-const": 1,
+    "prefer-const": 1
   }
 }

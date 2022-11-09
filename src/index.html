@@ -178,6 +178,10 @@
 </div>
 
 <!--    <button id="ledger-pairing-btn">Set pairing</button>-->
-<script src="./build/main.js" type="text/javascript"></script>
+<script type="module">
+  import { Buffer } from "buffer";
+  window.Buffer = Buffer;
+</script>
+<script type="module" src="js/index.js"></script>
 </body>
 </html>

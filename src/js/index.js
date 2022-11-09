@@ -1,7 +1,3 @@
-'use strict'
-const {Buffer} = require('buffer')
-window.Buffer = Buffer;
-
 // Initialize ledger bridge
 import LedgerBridge from './ledger-bridge'
 

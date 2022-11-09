@@ -1,8 +1,6 @@
-'use strict'
-
 import TransportWebHID from '@ledgerhq/hw-transport-webhid'
 
-import LedgerApp from "./ledger-app";
+import LedgerApp from './ledger-app'
 
 export default class LedgerBridge {
     constructor() {
@@ -77,7 +75,7 @@ export default class LedgerBridge {
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                error: new Error(e.toString())
+                error: new Error(e.toString()),
             })
         } finally {
             await this.cleanUp()
@@ -98,7 +96,7 @@ export default class LedgerBridge {
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                error: new Error(e.toString())
+                error: new Error(e.toString()),
             })
         } finally {
             await this.cleanUp()
@@ -119,7 +117,7 @@ export default class LedgerBridge {
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                error: new Error(e.toString())
+                error: new Error(e.toString()),
             })
         } finally {
             await this.cleanUp()
@@ -141,7 +139,7 @@ export default class LedgerBridge {
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                error: new Error(e.toString())
+                error: new Error(e.toString()),
             })
         } finally {
             await this.cleanUp()
