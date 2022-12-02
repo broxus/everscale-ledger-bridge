@@ -1,4 +1,4 @@
-// Initialize ledger bridge
+import '../style.css'
 import LedgerBridge from './ledger-bridge'
 
 (() => {
