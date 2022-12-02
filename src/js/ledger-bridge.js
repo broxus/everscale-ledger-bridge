@@ -27,7 +27,7 @@ export default class LedgerBridge {
                         await this.signMessage(replyAction, params.account, params.message)
                         break
                     case 'ledger-sign-transaction':
-                        await this.signTransaction(replyAction, params.account, params.wallet, params.message, params.context)
+                        await this.signTransaction(replyAction, params.account, params.originalWallet, params.wallet, params.message, params.context)
                         break
                     case 'ledger-close-bridge':
                         await this.cleanUp(replyAction)
@@ -149,11 +149,11 @@ export default class LedgerBridge {
         }
     }
 
-    async signTransaction(replyAction, account, wallet, message, context) {
+    async signTransaction(replyAction, account, originalWallet, wallet, message, context) {
         try {
             await this.makeApp()
 
-            const res = await this.app.signTransaction(account, wallet, message, context)
+            const res = await this.app.signTransaction(account, originalWallet, wallet, message, context)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: true,

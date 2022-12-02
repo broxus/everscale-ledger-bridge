@@ -102,10 +102,11 @@ export default class LedgerApp {
             })
     }
 
-    signTransaction(account, wallet, message, ctx) {
-        const data = Buffer.alloc(8)
+    signTransaction(account, originalWallet, wallet, message, ctx) {
+        const data = Buffer.alloc(12)
         data.writeUInt32BE(account, 0)
-        data.writeUInt32BE(wallet, 4)
+        data.writeUInt32BE(originalWallet, 4)
+        data.writeUInt32BE(wallet, 8)
 
         const decimals = Buffer.alloc(1)
         decimals.writeUInt8(parseInt(ctx.decimals, 10), 0)
