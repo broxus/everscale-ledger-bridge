@@ -53,12 +53,12 @@ export default class LedgerApp {
             })
     }
 
-    getAddress(account, contract, boolValidate = false) {
+    getAddress(account, contract) {
         const data = Buffer.alloc(8)
         data.writeUInt32BE(account, 0)
         data.writeUInt32BE(contract, 4)
         return this.transport
-            .send(CLA, INS_GET_ADDR, boolValidate ? 0x01 : 0x00, 0x00, data, [SW_OK])
+            .send(CLA, INS_GET_ADDR, 0x01, 0x00, data, [SW_OK])
             .then((response) => {
                 const status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0)
                 if (status === SW_OK) {
