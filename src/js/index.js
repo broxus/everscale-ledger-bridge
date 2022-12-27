@@ -1,8 +1,4 @@
-'use strict'
-const {Buffer} = require('buffer')
-window.Buffer = Buffer;
-
-// Initialize ledger bridge
+import '../style.css'
 import LedgerBridge from './ledger-bridge'
 
 (() => {

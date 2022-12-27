@@ -1,8 +1,6 @@
-'use strict'
-
 import TransportWebHID from '@ledgerhq/hw-transport-webhid'
 
-import LedgerApp from "./ledger-app";
+import LedgerApp from './ledger-app'
 
 export default class LedgerBridge {
     constructor() {
@@ -26,7 +24,10 @@ export default class LedgerBridge {
                         await this.getAddress(replyAction, params.account, params.contract)
                         break
                     case 'ledger-sign-message':
-                        await this.signMessage(replyAction, params.account, params.message, params.context)
+                        await this.signMessage(replyAction, params.account, params.message)
+                        break
+                    case 'ledger-sign-transaction':
+                        await this.signTransaction(replyAction, params.account, params.originalWallet, params.wallet, params.message, params.context)
                         break
                     case 'ledger-close-bridge':
                         await this.cleanUp(replyAction)
@@ -77,7 +78,7 @@ export default class LedgerBridge {
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                error: new Error(e.toString())
+                error: new Error(e.toString()),
             })
         } finally {
             await this.cleanUp()
@@ -98,7 +99,7 @@ export default class LedgerBridge {
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                error: new Error(e.toString())
+                error: new Error(e.toString()),
             })
         } finally {
             await this.cleanUp()
@@ -119,18 +120,18 @@ export default class LedgerBridge {
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                error: new Error(e.toString())
+                error: new Error(e.toString()),
             })
         } finally {
             await this.cleanUp()
         }
     }
 
-    async signMessage(replyAction, account, message, ctx) {
+    async signMessage(replyAction, account, message) {
         try {
             await this.makeApp()
 
-            const res = await this.app.signMessage(account, message, ctx)
+            const res = await this.app.signMessage(account, message)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: true,
@@ -141,7 +142,29 @@ export default class LedgerBridge {
             this.sendMessageToExtension({
                 action: replyAction,
                 success: false,
-                error: new Error(e.toString())
+                error: new Error(e.toString()),
+            })
+        } finally {
+            await this.cleanUp()
+        }
+    }
+
+    async signTransaction(replyAction, account, originalWallet, wallet, message, context) {
+        try {
+            await this.makeApp()
+
+            const res = await this.app.signTransaction(account, originalWallet, wallet, message, context)
+            this.sendMessageToExtension({
+                action: replyAction,
+                success: true,
+                payload: res,
+            })
+        } catch (err) {
+            const e = this.ledgerErrToMessage(err)
+            this.sendMessageToExtension({
+                action: replyAction,
+                success: false,
+                error: new Error(e.toString()),
             })
         } finally {
             await this.cleanUp()
