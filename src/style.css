@@ -11,6 +11,7 @@
 }
 
 body {
+    font-family: 'PT Root UI', serif;
     margin: 0;
     padding: 0;
 }
@@ -31,11 +32,9 @@ body {
 
 .connect-ledger__title {
     margin-bottom: 16px;
-    font-family: 'PT Root UI', serif;
 }
 
 .connect-ledger__comment {
-    font-family: 'PT Root UI', serif;
     font-size: 16px;
     line-height: 20px;
     letter-spacing: 0.25px;
@@ -60,7 +59,7 @@ body {
     padding: 0.8em 1em;
 
     font-style: normal;
-    font-family: 'PT Root UI', serif;
+    font-family: inherit;
     font-weight: bold;
     z-index: 2;
 }
@@ -86,3 +85,122 @@ body {
      color: #027bb8;
      background-color: #ffffff;
  }
+
+.connect-ledger-onboarding {
+    color: #fff;
+}
+
+.connect-ledger-onboarding__title {
+    font-weight: 700;
+    font-size: 44px;
+    line-height: 52px;
+    letter-spacing: .25px;
+    margin: 0 0 16px;
+}
+
+.connect-ledger-onboarding__buttons {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 400px;
+}
+
+.connect-ledger-onboarding__buttons > .connect-ledger-onboarding__btn {
+    flex: 1 1 0;
+}
+
+.connect-ledger-onboarding__btn {
+    display: block;
+    padding: 0;
+    outline: transparent none 0 !important;
+    border: none;
+    background: none;
+    box-shadow: none;
+    transition: .25s ease;
+    transition-property: color, background-color;
+    cursor: pointer;
+    border-radius: 0;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+.connect-ledger-onboarding__btn.btn--primary {
+    height: 56px;
+    font-weight: 700;
+    line-height: 56px;
+    text-align: center;
+    font-size: 18px;
+    letter-spacing: .15px;
+    color: #050A2E;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #C5E4F3;
+}
+.connect-ledger-onboarding__btn.btn--primary:hover{ background-color: #B2CEDF; }
+.connect-ledger-onboarding__btn.btn--primary:active{ background-color: #9FB9CC; }
+.connect-ledger-onboarding__btn.btn--primary:disabled{ background-color: rgba(197, 228, 243, .32); }
+
+.connect-ledger-onboarding__btn.btn--secondary {
+    height: 56px;
+    font-weight: 700;
+    line-height: 56px;
+    text-align: center;
+    font-size: 18px;
+    letter-spacing: .15px;
+    color: #C5E4F3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(197, 228, 243, .16);
+}
+
+.connect-ledger-onboarding__btn.btn--secondary:hover{ background-color: rgba(197, 228, 243, .32); }
+.connect-ledger-onboarding__btn.btn--secondary:active{ background-color: rgba(197, 228, 243, .08); }
+.connect-ledger-onboarding__btn.btn--secondary:disabled{
+    background-color: rgba(197, 228, 243, .12);
+    color: rgba(197, 228, 243, .56);
+}
+
+.usbs {
+    margin-bottom: 73px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 40px;
+    counter-reset: usbs;
+}
+
+.usb {
+    width: 300px;
+    list-style: none;
+}
+
+.usb__pic {
+    margin-bottom: 24px;
+}
+
+.usb__pic img {
+    border-style: none;
+    max-width: 100%;
+    height: auto;
+    transform: scale(1.2);
+}
+
+.usb__txt {
+    position: relative;
+    padding-left: 26px;
+    font-weight: 500;
+    font-size: 16px;
+    line-height: 22px;
+    letter-spacing: .25px;
+}
+
+.usb__txt::before {
+    counter-increment: usbs;
+    content: counter(usbs) ".";
+    position: absolute;
+    top: 0;
+    left: 0;
+    color: rgba(255, 255, 255, .56);
+}

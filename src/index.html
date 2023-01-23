@@ -5,7 +5,7 @@
 </head>
 
 <body>
-<div class="connect-ledger">
+<div class="connect-ledger" data-theme="default" style="display: none;">
     <div>
         <svg
                 class="connect-ledger__icon"
@@ -169,14 +169,51 @@
         </p>
     </div>
     <button
-            id="ledger-pairing-btn"
+            data-action="pairing"
             class="connect-ledger__buttons-next button blue"
     >
         Set pairing
     </button>
 </div>
 
-<!--    <button id="ledger-pairing-btn">Set pairing</button>-->
+<div class="connect-ledger-onboarding" data-theme="onboarding" style="display: none;">
+    <h1 class="connect-ledger-onboarding__title">Connect Ledger Hardware</h1>
+    <ul class="usbs">
+        <li class="usb">
+            <div class="usb__pic usb__pic--1"><img src="/img/usb-1-min.png" alt=""></div>
+            <div class="usb__txt">
+                Connect your Ledger to computer
+            </div>
+        </li>
+        <li class="usb">
+            <div class="usb__pic usb__pic--2"><img src="/img/usb-2-min.png" alt=""></div>
+            <div class="usb__txt">
+                Enter the pin to unlock
+            </div>
+        </li>
+        <li class="usb">
+            <div class="usb__pic usb__pic--3"><img src="/img/usb-3-min.png" alt=""></div>
+            <div class="usb__txt">
+                Navigate to the Everscale section on your Ledger dashboard to access the wallet
+            </div>
+        </li>
+    </ul>
+    <div class="connect-ledger-onboarding__buttons">
+        <button
+            data-action="back"
+            class="connect-ledger-onboarding__btn btn--secondary"
+        >
+            Back
+        </button>
+        <button
+            data-action="pairing"
+            class="connect-ledger-onboarding__btn btn--primary"
+        >
+            Connect
+        </button>
+    </div>
+</div>
+
 <script type="module">
   import { Buffer } from "buffer";
   window.Buffer = Buffer;
