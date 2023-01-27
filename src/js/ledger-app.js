@@ -119,7 +119,11 @@ export default class LedgerApp {
         }
         const ticker = Buffer.from(asset, 'utf-8')
 
-        const buffer = [data, decimals, Buffer.alloc(1, ticker.length), ticker, message.subarray(4)]
+        const address = ctx.address != null
+            ? Buffer.concat([Buffer.alloc(1, 1), Buffer.from(ctx.address, 'hex')], 33)
+            : Buffer.alloc(1, 0)
+
+        const buffer = [data, decimals, Buffer.alloc(1, ticker.length), ticker, address, message.subarray(4)]
         const apdus = Buffer.concat(buffer)
 
         return this.transport
