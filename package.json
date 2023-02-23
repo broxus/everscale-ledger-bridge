@@ -16,8 +16,8 @@
     "vite": "^3.2.3"
   },
   "dependencies": {
-    "@ledgerhq/hw-transport": "^6.27.6",
-    "@ledgerhq/hw-transport-webhid": "^6.27.6",
+    "@ledgerhq/hw-transport": "^6.28.1",
+    "@ledgerhq/hw-transport-webhid": "^6.27.12",
     "buffer": "^6.0.3"
   }
 }
