@@ -10,6 +10,10 @@ const SW_OK = 0x9000
 const SW_CANCEL = 0x6985
 const SW_NOT_ALLOWED = 0x6c66
 const SW_UNSUPPORTED = 0x6d00
+const FLAG_WITH_WALLET_ID = 1 << 0
+const FLAG_WITH_WORKCHAIN_ID = 1 << 1
+const FLAG_WITH_ADDRESS = 1 << 2
+const FLAG_WITH_CHAIN_ID = 1 << 3
 
 export default class LedgerApp {
     constructor(transport, scrambleKey = 'l0v') {
@@ -36,7 +40,7 @@ export default class LedgerApp {
         })
     }
 
-    getPublicKey(account, boolValidate = false) {
+    getPublicKey({ account }, boolValidate = false) {
         const data = Buffer.alloc(4)
         data.writeUInt32BE(account)
         return this.transport
@@ -53,7 +57,7 @@ export default class LedgerApp {
             })
     }
 
-    getAddress(account, contract) {
+    getAddress({ account, contract }) {
         const data = Buffer.alloc(5)
         data.writeUInt32BE(account, 0)
         data.writeUint8(contract, 4)
@@ -71,11 +75,22 @@ export default class LedgerApp {
             })
     }
 
-    signMessage(account, message) {
+    signMessage({ account, message, chainId }) {
+        let metadata = 0
+        const optional = []
+
         const data = Buffer.alloc(4)
         data.writeUInt32BE(account, 0)
 
-        const buffer = [data, message]
+        if (typeof chainId === 'number') {
+            const b = Buffer.alloc(4)
+            b.writeUInt32BE(chainId, 0)
+
+            metadata |= FLAG_WITH_CHAIN_ID
+            optional.push(b)
+        }
+
+        const buffer = [data, Buffer.alloc(1, metadata), ...optional, message]
         const apdus = Buffer.concat(buffer)
 
         return this.transport
@@ -102,28 +117,62 @@ export default class LedgerApp {
             })
     }
 
-    signTransaction(account, originalWallet, wallet, message, ctx) {
-        const data = Buffer.alloc(6)
+    signTransaction({ account, originalWallet, wallet, message, chainId, context }) {
+        // params.account, params.originalWallet, params.wallet, params.message, params.context
+        let metadata = 0
+        const optional = []
+
+        const data = Buffer.alloc(5)
         data.writeUInt32BE(account, 0)
         data.writeUint8(originalWallet, 4)
-        data.writeUint8(wallet, 5)
 
         const decimals = Buffer.alloc(1)
-        decimals.writeUInt8(parseInt(ctx.decimals, 10), 0)
+        decimals.writeUInt8(context.decimals, 0)
 
-        let asset = ctx.asset
-        if (ctx.asset.includes('-LP-')) {
+        let asset = context.asset
+        if (context.asset.includes('-LP-')) {
             asset = 'LP'
-        } else if (ctx.asset.length > 8) {
-            asset = ctx.asset.substring(0, 6) + '..'
+        } else if (context.asset.length > 8) {
+            asset = context.asset.substring(0, 6) + '..'
         }
         const ticker = Buffer.from(asset, 'utf-8')
 
-        const address = ctx.address != null
-            ? Buffer.concat([Buffer.alloc(1, 1), Buffer.from(ctx.address, 'hex')], 33)
-            : Buffer.alloc(1, 0)
+        if (typeof wallet === 'number' && wallet !== originalWallet) {
+            metadata |= FLAG_WITH_WALLET_ID
+            optional.push(Buffer.alloc(1, wallet))
+        }
 
-        const buffer = [data, decimals, Buffer.alloc(1, ticker.length), ticker, address, message.subarray(4)]
+        if (typeof context.workchainId === 'number') {
+            metadata |= FLAG_WITH_WORKCHAIN_ID
+            optional.push(Buffer.alloc(1, context.workchainId))
+        }
+
+        if (typeof context.address === 'string') {
+            if (context.address.length !== 64) {
+                throw new Error('Invalid address format')
+            }
+
+            metadata |= FLAG_WITH_ADDRESS
+            optional.push(Buffer.from(context.address, 'hex'))
+        }
+
+        if (typeof chainId === 'number') {
+            const b = Buffer.alloc(4)
+            b.writeUInt32BE(chainId, 0)
+
+            metadata |= FLAG_WITH_CHAIN_ID
+            optional.push(b)
+        }
+
+        const buffer = [
+            data,
+            decimals,
+            Buffer.alloc(1, ticker.length),
+            ticker,
+            Buffer.alloc(1, metadata),
+            ...optional,
+            message.subarray(4),
+        ]
         const apdus = Buffer.concat(buffer)
 
         return this.transport

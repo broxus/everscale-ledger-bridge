@@ -18,16 +18,16 @@ export default class LedgerBridge {
                         await this.getConfiguration(replyAction)
                         break
                     case 'ledger-get-public-key':
-                        await this.getPublicKey(replyAction, params.account)
+                        await this.getPublicKey(replyAction, params)
                         break
                     case 'ledger-get-address':
-                        await this.getAddress(replyAction, params.account, params.contract)
+                        await this.getAddress(replyAction, params)
                         break
                     case 'ledger-sign-message':
-                        await this.signMessage(replyAction, params.account, params.message)
+                        await this.signMessage(replyAction, params)
                         break
                     case 'ledger-sign-transaction':
-                        await this.signTransaction(replyAction, params.account, params.originalWallet, params.wallet, params.message, params.context)
+                        await this.signTransaction(replyAction, params)
                         break
                     case 'ledger-close-bridge':
                         await this.cleanUp(replyAction)
@@ -85,10 +85,10 @@ export default class LedgerBridge {
         }
     }
 
-    async getPublicKey(replyAction, account) {
+    async getPublicKey(replyAction, params) {
         try {
             await this.makeApp()
-            const res = await this.app.getPublicKey(account)
+            const res = await this.app.getPublicKey(params)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: true,
@@ -106,10 +106,10 @@ export default class LedgerBridge {
         }
     }
 
-    async getAddress(replyAction, account, contract) {
+    async getAddress(replyAction, params) {
         try {
             await this.makeApp()
-            const res = await this.app.getAddress(account, contract)
+            const res = await this.app.getAddress(params)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: true,
@@ -127,11 +127,11 @@ export default class LedgerBridge {
         }
     }
 
-    async signMessage(replyAction, account, message) {
+    async signMessage(replyAction, params) {
         try {
             await this.makeApp()
 
-            const res = await this.app.signMessage(account, message)
+            const res = await this.app.signMessage(params)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: true,
@@ -149,11 +149,11 @@ export default class LedgerBridge {
         }
     }
 
-    async signTransaction(replyAction, account, originalWallet, wallet, message, context) {
+    async signTransaction(replyAction, params) {
         try {
             await this.makeApp()
 
-            const res = await this.app.signTransaction(account, originalWallet, wallet, message, context)
+            const res = await this.app.signTransaction(params)
             this.sendMessageToExtension({
                 action: replyAction,
                 success: true,
