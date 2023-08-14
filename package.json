@@ -10,14 +10,14 @@
   "author": "",
   "license": "GNU GPL v3.0",
   "devDependencies": {
-    "@babel/eslint-parser": "^7.19.1",
-    "@vitejs/plugin-basic-ssl": "^0.1.2",
-    "eslint": "^8.27.0",
-    "vite": "^3.2.3"
+    "@babel/eslint-parser": "^7.22.10",
+    "@vitejs/plugin-basic-ssl": "^1.0.1",
+    "eslint": "^8.47.0",
+    "vite": "^4.4.9"
   },
   "dependencies": {
-    "@ledgerhq/hw-transport": "^6.28.1",
-    "@ledgerhq/hw-transport-webhid": "^6.27.12",
+    "@ledgerhq/hw-transport": "^6.28.7",
+    "@ledgerhq/hw-transport-webhid": "^6.27.18",
     "buffer": "^6.0.3"
   }
 }

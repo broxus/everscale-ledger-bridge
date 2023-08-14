@@ -10,6 +10,18 @@
     src: url('/fonts/PT-Root-UI-Bold.ttf');
 }
 
+@font-face {
+    font-family: 'Inter';
+    font-weight: 500;
+    src: url('/fonts/Inter-Medium.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-weight: 700;
+    src: url('/fonts/Inter-Bold.ttf') format('truetype');
+}
+
 body {
     font-family: 'PT Root UI', serif;
     margin: 0;
@@ -203,4 +215,226 @@ body {
     top: 0;
     left: 0;
     color: rgba(255, 255, 255, .56);
+}
+
+/* -----> SPARX <-----*/
+
+.sparx__btn {
+    box-shadow: none;
+    border: none;
+    outline: 0;
+    background: none;
+    cursor: pointer;
+    font-family: inherit;
+
+    font-size: 16px;
+    font-style: normal;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.64px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 56px;
+    min-width: 176px;
+    padding: 0 24px;
+    border-radius: 100px;
+}
+
+.sparx__btn--primary {
+    background-color: #222;
+    color: #fff;
+    border-radius: 100px;
+}
+.sparx__btn--primary:hover {
+    background-color: #52b6d3;
+    color: #fff;
+}
+.sparx__btn--primary:active {
+    color: #b3b3b3;
+}
+
+.sparx__btn--secondary {
+    background-color: #fff;
+    color: #222;
+    border-radius: 100px;
+    box-shadow: 0 0 45px 0 rgba(133, 133, 133, 0.1);
+}
+.sparx__btn--secondary:hover {
+    background-color: #52b6d3;
+    color: #fff;
+}
+.sparx__btn--secondary:active {
+    color: #b3b3b3;
+}
+
+.sparx {
+    font-family: Inter, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    min-height: 100vh;
+    background-color: #f7f7f7;
+    padding: 0 16px;
+}
+
+.sparx__title {
+    color: #222;
+    text-align: center;
+    font-size: 32px;
+    font-style: normal;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -1.92px;
+    margin: 0;
+}
+
+.sparx__comment {
+    color: #222;
+    text-align: center;
+    font-size: 16px;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 150%;
+    letter-spacing: -0.64px;
+    margin: 20px 0 0;
+}
+
+.sparx__pane {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 368px;
+    height: 346px;
+    max-width: 100%;
+
+    border-radius: 32px;
+    border: 1px solid #eee;
+    background: #fff;
+    box-shadow: 0 0 45px 0 rgba(133, 133, 133, 0.1);
+}
+
+.sparx__pane-img {
+    max-width: 100%;
+}
+
+.sparx__buttons {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    width: 100%;
+    margin-top: auto;
+}
+
+@media (max-width: 360px) {
+    .sparx__buttons .sparx__btn--secondary {
+        display: none;
+    }
+    .sparx__buttons .sparx__btn--primary {
+        width: 100%;
+    }
+}
+
+/* -----> SPARX ONBOARDING <-----*/
+
+.onboarding-sparx {
+    font-family: Inter, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    min-height: 100vh;
+    background-color: #f7f7f7;
+}
+
+.onboarding-sparx__title {
+    color: #222;
+    text-align: center;
+    font-size: 32px;
+    font-style: normal;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -1.92px;
+    margin: 0;
+}
+
+.onboarding-sparx__steps {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    counter-reset: step;
+}
+
+.onboarding-sparx__step {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 0 0 auto;
+    width: 368px;
+    height: 346px;
+    border-radius: 32px;
+    border: 1px solid #eee;
+    background: #fff;
+    box-shadow: 0 0 45px 0 rgba(133, 133, 133, .1);
+}
+
+.onboarding-sparx__step::before {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    counter-increment: step;
+    content: counter(step);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background-color: #222;
+    border-radius: 50%;
+
+    color: #fff;
+    font-size: 16px;
+    font-style: normal;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.64px;
+}
+
+.onboarding-sparx__step-img {
+    max-width: 100%;
+}
+
+.onboarding-sparx__step-title {
+    color: #222;
+    text-align: center;
+    font-size: 24px;
+    font-style: normal;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -1.44px;
+    margin: 16px 0 0;
+}
+
+.onboarding-sparx__step-text {
+    color: rgba(34, 34, 34, .7);
+    text-align: center;
+    font-size: 16px;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 150%;
+    letter-spacing: -0.64px;
+    margin-top: 8px;
+    max-width: 302px;
+}
+
+.onboarding-sparx__buttons {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: auto;
 }
