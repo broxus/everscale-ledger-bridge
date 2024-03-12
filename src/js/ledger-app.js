@@ -14,9 +14,13 @@ const FLAG_WITH_WALLET_ID = 1 << 0
 const FLAG_WITH_WORKCHAIN_ID = 1 << 1
 const FLAG_WITH_ADDRESS = 1 << 2
 const FLAG_WITH_CHAIN_ID = 1 << 3
+const MAX_CHUNK_SIZE = 255
 
 export default class LedgerApp {
     constructor(transport, scrambleKey = 'l0v') {
+        /**
+         * @type {Transport}
+         */
         this.transport = void 0
         this.transport = transport
         transport.decorateAppAPIMethods(
@@ -117,7 +121,7 @@ export default class LedgerApp {
             })
     }
 
-    signTransaction({ account, originalWallet, wallet, message, chainId, context }) {
+    async signTransaction({ account, originalWallet, wallet, message, chainId, context }) {
         // params.account, params.originalWallet, params.wallet, params.message, params.context
         let metadata = 0
         const optional = []
@@ -174,28 +178,53 @@ export default class LedgerApp {
             message.subarray(4),
         ]
         const apdus = Buffer.concat(buffer)
+        const slices = []
 
-        return this.transport
-          .send(CLA, INS_SIGN_TRANSACTION, 0x01, 0x00, apdus, [
-              SW_OK,
-              SW_CANCEL,
-              SW_NOT_ALLOWED,
-              SW_UNSUPPORTED,
-          ])
-          .then((response) => {
-              const status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0)
-              if (status === SW_OK) {
-                  const signature = response.slice(1, response.length - 2)
-                  return {signature}
-              } else if (status === SW_CANCEL) {
-                  throw new Error('Transaction approval request was rejected')
-              } else if (status === SW_UNSUPPORTED) {
-                  throw new Error('Message signing is not supported')
-              } else {
-                  throw new Error(
-                    'Message signing not allowed. Have you enabled it in the app settings?',
-                  )
-              }
-          })
+        for (let i = 0; i < apdus.length; i += MAX_CHUNK_SIZE) {
+            slices.push(
+              apdus.slice(i, Math.min(apdus.length, i + MAX_CHUNK_SIZE)),
+            )
+        }
+
+        let response, status
+
+        for (let i = 0; i < slices.length; i++) {
+            const slice = slices[i]
+            let p2 = 0x00 // single chunk
+
+            if (slices.length !== 1) {
+                if (i === 0) {
+                    p2 = 0x02 // first chunk
+                } else if (i === slices.length - 1) {
+                    p2 = 0x01 // last chunk
+                } else {
+                    p2 = 0x03 // intermediate chunk
+                }
+            }
+
+            response = await this.transport
+              .send(CLA, INS_SIGN_TRANSACTION, 0x01, p2, slice, [
+                  SW_OK,
+                  SW_CANCEL,
+                  SW_NOT_ALLOWED,
+                  SW_UNSUPPORTED,
+              ])
+            status = Buffer.from(response.slice(response.length - 2)).readUInt16BE(0)
+
+            if (status !== SW_OK) break
+        }
+
+        if (status === SW_OK) { // 36864
+            const signature = response.slice(1, response.length - 2)
+            return { signature }
+        } else if (status === SW_CANCEL) {
+            throw new Error('Transaction approval request was rejected')
+        } else if (status === SW_UNSUPPORTED) {
+            throw new Error('Message signing is not supported')
+        } else {
+            throw new Error(
+              'Message signing not allowed. Have you enabled it in the app settings?',
+            )
+        }
     }
 }
