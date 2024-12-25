@@ -236,10 +236,11 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    height: 48px;
+    height: 40px;
     min-width: 176px;
     padding: 0 24px;
     border-radius: 100px;
+    transition: 0.15s ease;
 }
 
 .sparx__btn--primary {
@@ -248,25 +249,25 @@ body {
     border-radius: 100px;
 }
 .sparx__btn--primary:hover {
-    background-color: #6347F5;
+    background-color: #7459ff;
     color: #fff;
 }
 .sparx__btn--primary:active {
-    color: #7D81A7;
+    box-shadow: inset 0 0 0 2px rgb(125, 129, 167);
 }
 
 .sparx__btn--secondary {
-    background-color: #444872;
+    background-color: #353960;
     color: #fff;
     border-radius: 100px;
     box-shadow: 0 0 45px 0 rgba(133, 133, 133, 0.1);
 }
 .sparx__btn--secondary:hover {
-    background-color: #6347F5;
+    background-color: #444872;
     color: #fff;
 }
 .sparx__btn--secondary:active {
-    color: #7D81A7;
+    box-shadow: inset 0 0 0 2px rgb(125, 129, 167);
 }
 
 .sparx {
@@ -346,9 +347,9 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 24px;
+    gap: 32px;
     min-height: 100vh;
-    background-color: #10152b;
+    background-color: #0D0F20;
 }
 
 .onboarding-sparx__title {
@@ -378,8 +379,8 @@ body {
     width: 368px;
     height: 346px;
     border-radius: 32px;
-    border: 1px solid #eee;
-    background: #fff;
+    border: 1px solid #353960;
+    background: #1E203A;
     box-shadow: 0 0 45px 0 rgba(133, 133, 133, .1);
 }
 
@@ -388,7 +389,7 @@ body {
 }
 
 .onboarding-sparx__step-title {
-    color: #222;
+    color: #fff;
     text-align: center;
     font-size: 24px;
     font-style: normal;
@@ -399,7 +400,7 @@ body {
 }
 
 .onboarding-sparx__step-text {
-    color: rgba(34, 34, 34, .7);
+    color: #fff;
     text-align: center;
     font-size: 16px;
     font-style: normal;
