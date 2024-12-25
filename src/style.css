@@ -313,9 +313,8 @@ body {
     max-width: 100%;
 
     border-radius: 32px;
-    border: 1px solid #eee;
-    background: #fff;
-    box-shadow: 0 0 45px 0 rgba(133, 133, 133, 0.1);
+    border: 1px solid #353960;
+    background: #1E203A;
 }
 
 .sparx__pane-img {
