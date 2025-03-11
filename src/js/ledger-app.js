@@ -23,11 +23,24 @@ export default class LedgerApp {
          */
         this.transport = void 0
         this.transport = transport
+        /**
+         * @type {Uint8Array | null}
+         */
+        this.configuration = null
         transport.decorateAppAPIMethods(
           this,
           ['getConfiguration', 'getPublicKey', 'getAddress', 'signMessage', 'signTransaction'],
           scrambleKey,
         )
+    }
+
+    get version() {
+        if (!this.configuration) return null
+        return {
+            major: this.configuration[0],
+            minor: this.configuration[1],
+            patch: this.configuration[2],
+        }
     }
 
     getConfiguration() {
@@ -79,22 +92,28 @@ export default class LedgerApp {
             })
     }
 
-    signMessage({ account, message, chainId }) {
-        let metadata = 0
+    async signMessage({ account, message, chainId }) {
         const optional = []
 
         const data = Buffer.alloc(4)
         data.writeUInt32BE(account, 0)
 
-        if (typeof chainId === 'number') {
-            const b = Buffer.alloc(4)
-            b.writeUInt32BE(chainId, 0)
+        // < 1.1.0
+        if (this.version && this.version.major === 1 && this.version.minor === 0) {
+            let metadata = 0
 
-            metadata |= FLAG_WITH_CHAIN_ID
-            optional.push(b)
+            if (typeof chainId === 'number') {
+                const b = Buffer.alloc(4)
+                b.writeUInt32BE(chainId, 0)
+
+                metadata |= FLAG_WITH_CHAIN_ID
+                optional.push(Buffer.alloc(1, metadata), b)
+            } else {
+                optional.push(Buffer.alloc(1, metadata))
+            }
         }
 
-        const buffer = [data, Buffer.alloc(1, metadata), ...optional, message]
+        const buffer = [data, ...optional, message]
         const apdus = Buffer.concat(buffer)
 
         return this.transport
