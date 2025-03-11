@@ -49,6 +49,14 @@ export default class LedgerBridge {
             console.log('LEDGER:::CREATE APP ERROR', e)
             throw e
         }
+
+        try {
+            const { configuration } = await this.app.getConfiguration()
+            this.app.configuration = configuration
+        } catch (e) {
+            console.log('LEDGER:::GET CONFIGURATION ERROR', e)
+            throw e
+        }
     }
 
     async cleanUp(replyAction) {
