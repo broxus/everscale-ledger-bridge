@@ -104,7 +104,7 @@ export default class LedgerApp {
 
             if (typeof chainId === 'number') {
                 const b = Buffer.alloc(4)
-                b.writeUInt32BE(chainId, 0)
+                b.writeInt32BE(chainId, 0)
 
                 metadata |= FLAG_WITH_CHAIN_ID
                 optional.push(Buffer.alloc(1, metadata), b)
@@ -181,7 +181,7 @@ export default class LedgerApp {
 
         if (typeof chainId === 'number') {
             const b = Buffer.alloc(4)
-            b.writeUInt32BE(chainId, 0)
+            b.writeInt32BE(chainId, 0)
 
             metadata |= FLAG_WITH_CHAIN_ID
             optional.push(b)
